@@ -1,0 +1,415 @@
+#version 450
+#if DENSITY_STORAGE == 1
+#extension GL_EXT_shader_16bit_storage : require
+layout(std430,binding=4) writeonly buffer HalfLayers {float16_t half_layers[];};
+#elif DENSITY_STORAGE == 2
+layout(r16f,binding=4) writeonly uniform image2DArray image_layers;
+#endif
+// SPDX-FileCopyrightText: 2026 Spektrafilm Android contributors
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// The filming pointwise math as TWO SEPARABLE STAGES (#218), so it can run on
+// the GPU during a real render instead of only on a render with every other
+// effect switched off.
+//
+// WHY THIS EXISTS ALONGSIDE gpu/filming.comp, which computes the same numbers.
+// filming.comp fuses expose and develop into one dispatch, and that fusion is
+// exactly what makes it unusable here: in the real pipeline the SPATIAL stages
+// -- highlight boost, camera diffusion, lens blur, halation -- sit between the
+// two halves, operating on the linear irradiance before the log10.
+// spektra.cpp's pointwise_route_ineligibility spells the consequence out: the
+// fused route refuses on `grain`, `halation`, `camera_diffusion`,
+// `camera_lens_blur`, `scan_spatial` and a dozen more, i.e. on every render a
+// user actually makes. Splitting the kernel at the log10 removes that
+// all-or-nothing property: expose runs, the spatial passes run, develop runs.
+//
+// filming.comp IS DELIBERATELY LEFT ALONE. Its SPIR-V is pinned to an NDK 27
+// glslc build because the #148 connected-device oracle evidence is bound to
+// those exact bytes (see pointwise_spirv.sha256). Editing it would detach that
+// evidence for a route that still has its own use. The cost is that the expose
+// and develop math now exists in two places; the mitigation is that
+// gpu/tests/test_filming_stage_gpu.cpp checks BOTH halves against the CPU
+// implementation, which is the thing either copy is supposed to agree with.
+//
+// FOUR BINDINGS, because that is what Ctx::Kernel/build_scan_pipeline already
+// provides and this needed no pipeline code of its own. filming.comp spends one
+// binding per curve; here the four curves are concatenated into one buffer at
+// fixed strides of n*3, which the shader derives from `n` alone.
+#define WG gl_WorkGroupSize.x
+layout(local_size_x=64,local_size_x_id=0) in;
+
+layout(std430, binding = 0) readonly  buffer InBuf  { float src[];    };
+// NOT writeonly: MODE_UNSHARP reads the plane it writes (the sharpened result
+// is a function of the original, which lives in the destination half).
+layout(std430, binding = 1) buffer OutBuf { float dst[];    };
+// The tc_lut in MODE_EXPOSE; the SECOND PLANE in MODE_MIX and MODE_UNSHARP.
+layout(std430, binding = 2) readonly  buffer TcLut  { float tc_lut[]; };
+// axis | curve, each n*3 floats, channel-interleaved exactly as the host holds
+// them. For MODE_DEVELOP the host supplies the axis
+// interpolate_exposure_to_density builds -- xp[k,c] = log_exposure[k]/gamma[c] --
+// and the NORMALIZED density curves. Deriving either here would break the rule
+// that the kernel owns no parameter.
+// NOT readonly: MODE_MAX writes one float per workgroup here. Every other mode
+// only reads it, and the host sizes it for whichever use is larger.
+layout(std430, binding = 3) buffer Curves { float curves[]; };
+
+shared float s_max[WG];
+
+#define MODE_EXPOSE  0u   // ProPhoto RGB -> raw irradiance
+#define MODE_DEVELOP 1u   // exposure -> density curves
+#define MODE_MAX     2u   // per-workgroup max of the source, for the boost
+#define MODE_BOOST   3u   // numba_boost_hightlights.boost_highlights
+#define MODE_MIX     4u   // (1 - amt) * src + amt * other
+#define MODE_UNSHARP 5u   // src + amt * (src - other)
+#define MODE_LOG10   6u   // log10(max(src, 0) + 1e-10), the exposure bridge
+#define MODE_LAYERS  7u   // density_cmy -> the 9 per-sublayer densities
+#define MODE_SUBC    8u   // dst[p,c] = src[p,c] - k[c], a per-CHANNEL constant
+
+// MODE_SUBC exists because "subtract a constant" is not one constant: the grain
+// stage's tail is `out -= density_min[c]`, three different values indexed by
+// channel. A single-scalar subtract would be quietly wrong on two channels out
+// of three, which is the kind of error that survives a mean check.
+
+#define FLAG_POSITIVE 2u  // positive film: negate the query AND the axis
+
+// MODE_LAYERS IS THE GRAIN SAMPLER'S INPUT, and the largest CPU item left in the
+// grain stage: nine interpolations per pixel (3 channels x 3 sublayers), which
+// is 112M of them at 12.5 MP, measured at 247 ms on device -- more than the
+// particle sampler itself costs there. It also materialises npix*9 floats, 450 MB
+// at that size, purely to hand them to a pass that is already on the GPU.
+//
+// One search serves three sublayers: the axis is per CHANNEL, so the bracket for
+// a given channel is found once and evaluated against each sublayer's curve.
+
+// MODE_LOG10 IS ITS OWN MODE rather than a flag on develop, and that is not
+// arbitrary. The pipeline is
+//
+//   expose -> [spatial] -> log10 -> develop(log_raw) -> DIR couplers(log_raw)
+//
+// and BOTH develop and the DIR couplers read log_raw. Folding the log10 into
+// develop would leave the couplers without the plane they index by, so the
+// bridge has to exist as a plane in its own right.
+
+// TWO-INPUT POINTWISE, which the pipeline needs in three places and had in none:
+//
+//   the diffusion resolve   E_out = (1 - p_s) * E_in + p_s * (K_s * E_in)
+//   the unsharp mask        rgb  += amount * (rgb - G(sigma) * rgb)
+//   (and the same shape turns up wherever a filtered plane is blended back)
+//
+// Each is trivial arithmetic over two whole planes, so on its own each would be
+// an upload, a dispatch and a readback to do one multiply-add per component --
+// which is why all three are still on the CPU. Under residency they are free,
+// and they are the reason residency is worth having.
+//
+// The SECOND PLANE arrives on binding 2, which the tc_lut occupies in
+// MODE_EXPOSE and nothing occupies in these modes. That is why this needed no
+// new descriptor layout and no new pipeline: the layout already had a spare
+// float buffer, it was just called something else.
+
+// THE HIGHLIGHT BOOST NEEDS A FRAME-WIDE MAXIMUM before its per-element map,
+// which is why it is two modes and not one. MODE_MAX reduces each workgroup to a
+// single float and the host takes the max of those, IN f64, and derives every
+// scalar the map needs -- the same rule the rest of this engine follows: the
+// kernel owns no parameter.
+//
+// The reduction is a plain shared-memory tree with no atomics, and it is
+// deterministic for free: max is associative AND commutative, so the order the
+// partial maxima combine in cannot change the answer. (A SUM reduced this way
+// would not be, which is exactly the distinction the CPU-side PSF sum has to
+// respect.)
+
+// FLAG_LOG10 folds log10(max(v,0) + 1e-10) into whichever stage carries it.
+// The CPU pipeline puts that log10 in two different places depending on what
+// else is switched on: expose_impl fuses it into the float32 output when every
+// stage between the irradiance and the log10 is inert, and otherwise applies it
+// as its own pass after halation. One flag reproduces both placements instead
+// of needing two shaders.
+#define FLAG_LOG10   1u
+
+layout(push_constant) uniform Push {
+    uint  npix;
+    uint  groups_x;
+    uint  total_groups;
+    uint  mode;
+    uint  flags;
+    int   L;              // tc_lut edge
+    int   n;              // curve points
+    float exp_mult;       // 2^exposure_compensation_ev
+    // boost_highlights, every one host-derived in f64 from the frame maximum:
+    //   x > raw_x0  ->  x + boost_scale * (exp(a*dx) - a*dx - 1),
+    //   dx = (x - raw_x0) * inv_max_raw
+    float raw_x0;
+    float inv_max_raw;
+    float boost_scale;
+    float boost_a;
+    float mix_amount;     // p_s for MODE_MIX, the unsharp amount for MODE_UNSHARP
+    // THREE SCALARS, not an array. A push-constant `float[3]` has a stride of 4
+    // under std430 and 16 under std140, and which one a push block resolves to
+    // is exactly the sort of thing that is easy to be confident about and wrong
+    // about -- a silent 12-byte shift of everything after it. Scalars have the
+    // same layout under either rule.
+    float sub_c0;         // MODE_SUBC: one constant per channel
+    float sub_c1;
+    float sub_c2;
+    // Auto-exposure gain, applied to the SOURCE. expose_f32_gain folds
+    // 2^ae_ev into the float32 read rather than materialising a scaled plane;
+    // this reproduces that placement instead of asking the caller to pre-scale.
+    float src_gain;
+} pc;
+
+float finite_or(float v, float fallback) {
+    return (isnan(v) || isinf(v)) ? fallback : v;
+}
+
+float mitchell(float t) {
+    const float B = 1.0 / 3.0;
+    const float C = 1.0 / 3.0;
+    float x = abs(t);
+    if (x < 1.0)
+        return (1.0 / 6.0) * ((12.0 - 9.0 * B - 6.0 * C) * x * x * x +
+                              (-18.0 + 12.0 * B + 6.0 * C) * x * x + (6.0 - 2.0 * B));
+    if (x < 2.0)
+        return (1.0 / 6.0) * ((-B - 6.0 * C) * x * x * x + (6.0 * B + 30.0 * C) * x * x +
+                              (-12.0 * B - 48.0 * C) * x + (8.0 * B + 24.0 * C));
+    return 0.0;
+}
+
+int safe_index(int idx, int L) {
+    if (idx < 0) return -idx;
+    if (idx >= L) return 2 * (L - 1) - idx;
+    return idx;
+}
+
+float cubic_bf(float coord, int L, out int base) {
+    if (coord <= 0.0) coord = 0.0;
+    else if (coord >= float(L - 1)) coord = float(L - 1);
+    if (coord >= float(L - 1)) { base = L - 2; return 1.0; }
+    int b = int(floor(coord));
+    base = clamp(b, 0, L - 2);
+    return coord - float(base);
+}
+
+float log10f(float v) { return log2(v) * 0.30102999566398119521; }
+
+// Per-channel linear interpolation with clamped ends, over the concatenated
+// axis|curve buffer. Same structure as filming.comp's interp_dev/interp_dir,
+// which the #148 device gate checked against the CPU.
+float interp_curve(float x, int c) {
+    int n = pc.n;
+    int curve_off = n * 3;
+    float x0 = curves[c];
+    float xN = curves[(n - 1) * 3 + c];
+    if (x <= x0) return curves[curve_off + c];
+    if (x >= xN) return curves[curve_off + (n - 1) * 3 + c];
+    int low = 0;
+    int high = n - 1;
+    while (high - low > 1) {
+        int middle = low + (high - low) / 2;
+        if (x < curves[middle * 3 + c]) high = middle;
+        else low = middle;
+    }
+    float xl = curves[low * 3 + c];
+    float xh = curves[high * 3 + c];
+    float dx = xh - xl;
+    float t = (dx != 0.0) ? (x - xl) / dx : 0.0;
+    float y0 = curves[curve_off + low * 3 + c];
+    float y1 = curves[curve_off + high * 3 + c];
+    return y0 + t * (y1 - y0);
+}
+
+void main() {
+    uint group = gl_WorkGroupID.y * pc.groups_x + gl_WorkGroupID.x;
+
+    if (pc.mode == MODE_MAX) {
+        // npix here counts COMPONENTS, not pixels: the CPU takes its maximum
+        // over the whole w*h*3 plane, not per pixel.
+        uint lid = gl_LocalInvocationID.x;
+        uint i = group * WG + lid;
+        // Out-of-range lanes contribute 0, which cannot raise the maximum of a
+        // non-negative irradiance plane and keeps every lane in the barrier.
+        s_max[lid] = (group < pc.total_groups && i < pc.npix)
+                         ? max(finite_or(src[i], 0.0), 0.0) : 0.0;
+        barrier();
+        for (uint stride = WG / 2u; stride > 0u; stride >>= 1u) {
+            if (lid < stride) s_max[lid] = max(s_max[lid], s_max[lid + stride]);
+            barrier();
+        }
+        if (lid == 0u && group < pc.total_groups) curves[group] = s_max[0];
+        return;
+    }
+
+    if (group >= pc.total_groups) return;
+    uint p = group * WG + gl_LocalInvocationID.x;
+
+    if (pc.mode == MODE_SUBC) {
+        // Per PIXEL: three components each, so the channel index is meaningful.
+        if (p >= pc.npix) return;
+        dst[p * 3u + 0u] = finite_or(src[p * 3u + 0u] - pc.sub_c0, 0.0);
+        dst[p * 3u + 1u] = finite_or(src[p * 3u + 1u] - pc.sub_c1, 0.0);
+        dst[p * 3u + 2u] = finite_or(src[p * 3u + 2u] - pc.sub_c2, 0.0);
+        return;
+    }
+
+    if (pc.mode == MODE_LAYERS) {
+        // Per PIXEL here, not per component: nine outputs each.
+        if (p >= pc.npix) return;
+        int n = pc.n;
+        int layersOff = n * 3;          // curves = [axis n*3][layer curves n*9]
+        bool positive = (pc.flags & FLAG_POSITIVE) != 0u;
+        for (int ch = 0; ch < 3; ++ch) {
+            float x = finite_or(src[p * 3u + uint(ch)], 0.0);
+            if (positive) x = -x;
+            // The axis is already negated by the host for positive film, so the
+            // ascending-order requirement holds either way and this is one
+            // clamped linear search, shared by the three sublayers below.
+            float x0 = curves[ch];
+            float xN = curves[(n - 1) * 3 + ch];
+            int low = 0;
+            int high = n - 1;
+            float t = 0.0;
+            bool below = x <= x0;
+            bool above = x >= xN;
+            if (!below && !above) {
+                while (high - low > 1) {
+                    int mid = low + (high - low) / 2;
+                    if (x < curves[mid * 3 + ch]) high = mid; else low = mid;
+                }
+                float xl = curves[low * 3 + ch];
+                float xh = curves[high * 3 + ch];
+                float dx = xh - xl;
+                t = (dx != 0.0) ? (x - xl) / dx : 0.0;
+            }
+            for (int L = 0; L < 3; ++L) {
+                float v;
+                if (below)      v = curves[layersOff + L * 3 + ch];
+                else if (above) v = curves[layersOff + (n - 1) * 9 + L * 3 + ch];
+                else {
+                    float y0 = curves[layersOff + low * 9 + L * 3 + ch];
+                    float y1 = curves[layersOff + high * 9 + L * 3 + ch];
+                    v = y0 + t * (y1 - y0);
+                }
+#if DENSITY_STORAGE == 1
+                half_layers[p * 9u + uint(L * 3 + ch)] = float16_t(v);
+#elif DENSITY_STORAGE == 2
+                // The existing src_gain push slot carries width only in MODE_LAYERS.
+                uint width=uint(pc.src_gain);
+                imageStore(image_layers,ivec3(p%width,p/width,L*3+ch),vec4(v));
+#else
+                dst[p * 9u + uint(L * 3 + ch)] = v;
+#endif
+            }
+        }
+        return;
+    }
+
+    if (pc.mode == MODE_LOG10) {
+        // Component-wise: pc.npix is the component count.
+        if (p >= pc.npix) return;
+        float v = finite_or(src[p], 0.0);
+        dst[p] = finite_or(log10f(max(v, 0.0) + 1e-10), -10.0);
+        return;
+    }
+
+    if (pc.mode == MODE_MIX || pc.mode == MODE_UNSHARP) {
+        // Component-wise, like the boost modes: pc.npix is the component count.
+        if (p >= pc.npix) return;
+        float a = finite_or(src[p], 0.0);
+        float b = finite_or(tc_lut[p], 0.0);
+        float o = (pc.mode == MODE_MIX)
+                      ? (1.0 - pc.mix_amount) * a + pc.mix_amount * b
+                      : a + pc.mix_amount * (a - b);
+        dst[p] = finite_or(o, 0.0);
+        return;
+    }
+
+    if (pc.mode == MODE_BOOST) {
+        // Component-wise, like MODE_MAX: pc.npix is the component count.
+        if (p >= pc.npix) return;
+        float x = finite_or(src[p], 0.0);
+        if (x > pc.raw_x0) {
+            float dx = (x - pc.raw_x0) * pc.inv_max_raw;
+            float ax = pc.boost_a * dx;
+            x = x + pc.boost_scale * (exp(ax) - ax - 1.0);
+        }
+        dst[p] = finite_or(x, 0.0);
+        return;
+    }
+
+    if (p >= pc.npix) return;
+
+    if (pc.mode == MODE_EXPOSE) {
+        // Explicit containment, as in filming.comp: an invalid source component
+        // becomes black before any coordinate or index calculation.
+        float r   = finite_or(src[p * 3u + 0u], 0.0) * pc.src_gain;
+        float g   = finite_or(src[p * 3u + 1u], 0.0) * pc.src_gain;
+        float bch = finite_or(src[p * 3u + 2u], 0.0) * pc.src_gain;
+
+        float X = 0.7815775876144749 * r + 0.12427353211547089 * g + 0.05084064074531416 * bch;
+        float Y = 0.28106991658512925 * r + 0.7111246050020191 * g + 0.0078043503519031375 * bch;
+        float Z = 0.0008785229438793953 * r + 0.0012166783269637077 * g + 0.9190442562432091 * bch;
+        float bsum = X + Y + Z;
+        float denom = max(bsum, 1e-10);
+        float cx = clamp(X / denom, 0.0, 1.0);
+        float cy = clamp(Y / denom, 0.0, 1.0);
+        float qy = clamp(cy / max(1.0 - cx, 1e-10), 0.0, 1.0);
+        float qx = clamp((1.0 - cx) * (1.0 - cx), 0.0, 1.0);
+        float bmul = finite_or(bsum, 0.0);
+
+        int L = pc.L;
+        float scale = float(L - 1);
+        int xb; float xf = cubic_bf(qx * scale, L, xb);
+        int yb; float yf = cubic_bf(qy * scale, L, yb);
+        float wx[4] = float[4](mitchell(xf + 1.0), mitchell(xf),
+                               mitchell(xf - 1.0), mitchell(xf - 2.0));
+        float wy[4] = float[4](mitchell(yf + 1.0), mitchell(yf),
+                               mitchell(yf - 1.0), mitchell(yf - 2.0));
+        float acc0 = 0.0, acc1 = 0.0, acc2 = 0.0, wsum = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            int xi = safe_index(xb - 1 + i, L);
+            for (int j = 0; j < 4; ++j) {
+                int yj = safe_index(yb - 1 + j, L);
+                float w = wx[i] * wy[j];
+                wsum += w;
+                int cell = (xi * L + yj) * 3;
+                acc0 += w * tc_lut[cell + 0];
+                acc1 += w * tc_lut[cell + 1];
+                acc2 += w * tc_lut[cell + 2];
+            }
+        }
+        if (wsum != 0.0) { acc0 /= wsum; acc1 /= wsum; acc2 /= wsum; }
+
+        // The three spatial stages operate on the LINEAR irradiance, so the
+        // log10 is folded in only when the host says every one of them is inert
+        // -- the same condition expose_impl's `pointwise_fused` tests.
+        float v0 = acc0 * bmul * pc.exp_mult;
+        float v1 = acc1 * bmul * pc.exp_mult;
+        float v2 = acc2 * bmul * pc.exp_mult;
+        if ((pc.flags & FLAG_LOG10) != 0u) {
+            dst[p * 3u + 0u] = finite_or(log10f(max(v0, 0.0) + 1e-10), -10.0);
+            dst[p * 3u + 1u] = finite_or(log10f(max(v1, 0.0) + 1e-10), -10.0);
+            dst[p * 3u + 2u] = finite_or(log10f(max(v2, 0.0) + 1e-10), -10.0);
+        } else {
+            dst[p * 3u + 0u] = finite_or(v0, 0.0);
+            dst[p * 3u + 1u] = finite_or(v1, 0.0);
+            dst[p * 3u + 2u] = finite_or(v2, 0.0);
+        }
+        return;
+    }
+
+    // MODE_DEVELOP: density_curves.py::interpolate_exposure_to_density. The
+    // POINTWISE DIR couplers are NOT folded in: on a real render the coupler
+    // correction is diffused (dir_couplers.diffusion_size_um > 0), which is a
+    // spatial pass with its own kernel, and a fused pointwise tail here would be
+    // dead code that could silently disagree with it.
+    float e0 = finite_or(src[p * 3u + 0u], 0.0);
+    float e1 = finite_or(src[p * 3u + 1u], 0.0);
+    float e2 = finite_or(src[p * 3u + 2u], 0.0);
+    if ((pc.flags & FLAG_LOG10) != 0u) {
+        e0 = log10f(max(e0, 0.0) + 1e-10);
+        e1 = log10f(max(e1, 0.0) + 1e-10);
+        e2 = log10f(max(e2, 0.0) + 1e-10);
+    }
+    dst[p * 3u + 0u] = finite_or(interp_curve(e0, 0), 1e4);
+    dst[p * 3u + 1u] = finite_or(interp_curve(e1, 1), 1e4);
+    dst[p * 3u + 2u] = finite_or(interp_curve(e2, 2), 1e4);
+}

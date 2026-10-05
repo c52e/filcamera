@@ -1,0 +1,605 @@
+{
+  "androidRepository": "https://github.com/thetechgeekko/Spektrafilm-android",
+  "androidCommit": "15fb120996f03fc1e58a9a9d819e335f65d7a092",
+  "algorithmRepository": "https://github.com/andreavolpato/spektrafilm",
+  "algorithmCommit": "3bb2c2d2801ff68b92019cf1dbcbb133d60832bc",
+  "migrationBaseline": "05e76c9",
+  "files": {
+    "jni_safety.h": {
+      "upstreamSha256": "1c50340aa7c3be0c3b20acc5208d95cd534b96a012b21ad8cc7f98b7e65f6658",
+      "origin": "jni_safety.h",
+      "migrationSha256": "1c50340aa7c3be0c3b20acc5208d95cd534b96a012b21ad8cc7f98b7e65f6658"
+    },
+    "spektra.cpp": {
+      "upstreamSha256": "5390a74a2144692b7f3bf2553e4e5d6d208365e12d39aa1d198291d594f459f1",
+      "origin": "spektra.cpp",
+      "migrationSha256": "6bcf59c593aa1afd697160c96101a0667d0d982380ea0d22955323a15a1d21b5"
+    },
+    "spektra.h": {
+      "upstreamSha256": "96a9f56ee43ae9f5bb90c77e76c99937b21af4e8a497f84c7b462bd7a1530d77",
+      "origin": "spektra.h",
+      "migrationSha256": "96a9f56ee43ae9f5bb90c77e76c99937b21af4e8a497f84c7b462bd7a1530d77"
+    },
+    "gpu/cctf_encode.comp": {
+      "upstreamSha256": "6e902cbe1479b84f18763060d3192b0d1347fedc24f3137d6bc7c47ec69392ee",
+      "origin": "gpu/cctf_encode.comp",
+      "migrationSha256": "6e902cbe1479b84f18763060d3192b0d1347fedc24f3137d6bc7c47ec69392ee"
+    },
+    "gpu/cctf_encode_spv.h": {
+      "upstreamSha256": "d6ef706889ec9137275ea8fdfba3a0ba5a5f953c0e752a667557739d360fed5a",
+      "origin": "gpu/cctf_encode_spv.h",
+      "migrationSha256": "d6ef706889ec9137275ea8fdfba3a0ba5a5f953c0e752a667557739d360fed5a"
+    },
+    "gpu/fft_convolve.comp": {
+      "upstreamSha256": "6498282e605e3aae4cf9de05b0288eee632c92e796bc51ca18e785ecc0d046c9",
+      "origin": "gpu/fft_convolve.comp",
+      "migrationSha256": "6498282e605e3aae4cf9de05b0288eee632c92e796bc51ca18e785ecc0d046c9"
+    },
+    "gpu/fft_convolve_spv.h": {
+      "upstreamSha256": "fb4bf2d294e74fc48713e0d38397a817c9cacd54bed5054da49dfdf1167a2918",
+      "origin": "gpu/fft_convolve_spv.h",
+      "migrationSha256": "fb4bf2d294e74fc48713e0d38397a817c9cacd54bed5054da49dfdf1167a2918"
+    },
+    "gpu/filming.comp": {
+      "upstreamSha256": "a5c1d4cacdac4cfa089844079973c30817eb2a3186891fe407ef39f964729dc0",
+      "origin": "gpu/filming.comp",
+      "migrationSha256": "a5c1d4cacdac4cfa089844079973c30817eb2a3186891fe407ef39f964729dc0"
+    },
+    "gpu/filming_spv.h": {
+      "upstreamSha256": "e8796c2d06ace14592bfae70473fbf8e2e8051c8013dbf30c4fd02e96463490c",
+      "origin": "gpu/filming_spv.h",
+      "migrationSha256": "e8796c2d06ace14592bfae70473fbf8e2e8051c8013dbf30c4fd02e96463490c"
+    },
+    "gpu/filming_stage.comp": {
+      "upstreamSha256": "a077e6666344688c1bb078a66ef54003b6c0092759e838e920ba86b527d8913e",
+      "origin": "gpu/filming_stage.comp",
+      "migrationSha256": "a077e6666344688c1bb078a66ef54003b6c0092759e838e920ba86b527d8913e"
+    },
+    "gpu/filming_stage_spv.h": {
+      "upstreamSha256": "6548b109fcd1239bf9518a229037aabe6facec6ff54a6c3f364cf215bfc8e786",
+      "origin": "gpu/filming_stage_spv.h",
+      "migrationSha256": "6548b109fcd1239bf9518a229037aabe6facec6ff54a6c3f364cf215bfc8e786"
+    },
+    "gpu/glare.comp": {
+      "upstreamSha256": "6f241829aa767b0ec62c87300595954057fc8651a7b75efa38ce65ab79e994f7",
+      "origin": "gpu/glare.comp",
+      "migrationSha256": "6f241829aa767b0ec62c87300595954057fc8651a7b75efa38ce65ab79e994f7"
+    },
+    "gpu/glare_spv.h": {
+      "upstreamSha256": "c37e4c29f075396946f9bac835ee57e7237c59e41cc88e2171038287a4ded6a2",
+      "origin": "gpu/glare_spv.h",
+      "migrationSha256": "c37e4c29f075396946f9bac835ee57e7237c59e41cc88e2171038287a4ded6a2"
+    },
+    "gpu/grain.comp": {
+      "upstreamSha256": "75e9da52ac87e611cdc7f5d0e03a9a561b20d1132b1b734785e1a05393da736e",
+      "origin": "gpu/grain.comp",
+      "migrationSha256": "75e9da52ac87e611cdc7f5d0e03a9a561b20d1132b1b734785e1a05393da736e"
+    },
+    "gpu/grain_spv.h": {
+      "upstreamSha256": "8e97e522154e852a050db4818d82d005a34f780fda97da4d1ddb6b42803f84f7",
+      "origin": "gpu/grain_spv.h",
+      "migrationSha256": "8e97e522154e852a050db4818d82d005a34f780fda97da4d1ddb6b42803f84f7"
+    },
+    "gpu/halation_scatter.comp": {
+      "upstreamSha256": "10661272568a6d422e1808a83b6926527d1775ccd34f9b362bbfd3942799880f",
+      "origin": "gpu/halation_scatter.comp",
+      "migrationSha256": "10661272568a6d422e1808a83b6926527d1775ccd34f9b362bbfd3942799880f"
+    },
+    "gpu/halation_scatter_spv.h": {
+      "upstreamSha256": "6cb601b7a89c3941a01afa3516b0ec3e18e78de004a5a3578fc626f165e58998",
+      "origin": "gpu/halation_scatter_spv.h",
+      "migrationSha256": "6cb601b7a89c3941a01afa3516b0ec3e18e78de004a5a3578fc626f165e58998"
+    },
+    "gpu/printing.comp": {
+      "upstreamSha256": "5baed59a757196d86292a4870b0f8344c48976a3e4c8dcba02b6f4660afb30e6",
+      "origin": "gpu/printing.comp",
+      "migrationSha256": "5baed59a757196d86292a4870b0f8344c48976a3e4c8dcba02b6f4660afb30e6"
+    },
+    "gpu/printing_spv.h": {
+      "upstreamSha256": "c6b59e2eb696c1c5baec81fdba924c4d2b7e5f56bd91aff2572aafd334a6ecf2",
+      "origin": "gpu/printing_spv.h",
+      "migrationSha256": "c6b59e2eb696c1c5baec81fdba924c4d2b7e5f56bd91aff2572aafd334a6ecf2"
+    },
+    "gpu/scan_spectral.comp": {
+      "upstreamSha256": "ed96dad0db8aaa909b57d7c4eb789d1c4899d8d0d4089634b4cb5178bf9a0eb8",
+      "origin": "gpu/scan_spectral.comp",
+      "migrationSha256": "ed96dad0db8aaa909b57d7c4eb789d1c4899d8d0d4089634b4cb5178bf9a0eb8"
+    },
+    "gpu/scan_spectral_chain.comp": {
+      "upstreamSha256": "3bac7d9fa6d30a6cdcae153f59e25ac80199c17e18b3146d38912ca5117c9b0a",
+      "origin": "gpu/scan_spectral_chain.comp",
+      "migrationSha256": "3bac7d9fa6d30a6cdcae153f59e25ac80199c17e18b3146d38912ca5117c9b0a"
+    },
+    "gpu/scan_spectral_chain_spv.h": {
+      "upstreamSha256": "29d02d408c25b14bc3b795aadbb62184f5f356c7ff34a5efa973f88e99f6465d",
+      "origin": "gpu/scan_spectral_chain_spv.h",
+      "migrationSha256": "29d02d408c25b14bc3b795aadbb62184f5f356c7ff34a5efa973f88e99f6465d"
+    },
+    "gpu/scan_spectral_lin.comp": {
+      "upstreamSha256": "a151dc604d9a04acbd89ec096587d08d47486a48e9f2bc984ce28e573607296d",
+      "origin": "gpu/scan_spectral_lin.comp",
+      "migrationSha256": "a151dc604d9a04acbd89ec096587d08d47486a48e9f2bc984ce28e573607296d"
+    },
+    "gpu/scan_spectral_lin_spv.h": {
+      "upstreamSha256": "e71145b9ae43bbd2e347556dd6b1a3357344e4d4912006a3b4cfd99cd5e09261",
+      "origin": "gpu/scan_spectral_lin_spv.h",
+      "migrationSha256": "e71145b9ae43bbd2e347556dd6b1a3357344e4d4912006a3b4cfd99cd5e09261"
+    },
+    "gpu/scan_spectral_spv.h": {
+      "upstreamSha256": "ccbd66d76eac045c6c4f0b1e6aae83994bace30b3cd59e715b20145aaa4998cd",
+      "origin": "gpu/scan_spectral_spv.h",
+      "migrationSha256": "ccbd66d76eac045c6c4f0b1e6aae83994bace30b3cd59e715b20145aaa4998cd"
+    },
+    "gpu/vulkan_compute.cpp": {
+      "upstreamSha256": "514b77589d13ba77c8054c12b8a5215c612b600373181be73604b8f3e2c74f27",
+      "origin": "gpu/vulkan_compute.cpp",
+      "migrationSha256": "bb3d3c3df7a6c081b4db03cbc06e0ffdd18100b56f1960935324fb92a7970659"
+    },
+    "gpu/vulkan_compute.h": {
+      "upstreamSha256": "bae87937d8ca2e1a8cd4a6da726857e31fde67443165f211de578bcaf145c157",
+      "origin": "gpu/vulkan_compute.h",
+      "migrationSha256": "bae87937d8ca2e1a8cd4a6da726857e31fde67443165f211de578bcaf145c157"
+    },
+    "io/npy_lut.cpp": {
+      "upstreamSha256": "3af56a48870044da7650b39d66c22d131eca6ff3d4ba2a0f3a5d1520eb9c41fd",
+      "origin": "io/npy_lut.cpp",
+      "migrationSha256": "3af56a48870044da7650b39d66c22d131eca6ff3d4ba2a0f3a5d1520eb9c41fd"
+    },
+    "io/npy_lut.h": {
+      "upstreamSha256": "443e6f8e4f1944f9598160ad8398e1e8ce5cf9d3dfcd60416dd6e0733baac0ef",
+      "origin": "io/npy_lut.h",
+      "migrationSha256": "443e6f8e4f1944f9598160ad8398e1e8ce5cf9d3dfcd60416dd6e0733baac0ef"
+    },
+    "kernels/exp10.h": {
+      "upstreamSha256": "379b105b54995ab6552f67094c00cba411337645d077681dd1a7bd5b1d9b2f43",
+      "origin": "kernels/exp10.h",
+      "migrationSha256": "379b105b54995ab6552f67094c00cba411337645d077681dd1a7bd5b1d9b2f43"
+    },
+    "kernels/exponential_filter.cpp": {
+      "upstreamSha256": "54c2099606396b8b5296f83a1740df851ab3081958193346212baf4f92fd00d5",
+      "origin": "kernels/exponential_filter.cpp",
+      "migrationSha256": "54c2099606396b8b5296f83a1740df851ab3081958193346212baf4f92fd00d5"
+    },
+    "kernels/exponential_filter.h": {
+      "upstreamSha256": "bb87182fcedd4d6da780b4e5d1298cbdfe719a5d7ddd5bb7841950fbbf761be2",
+      "origin": "kernels/exponential_filter.h",
+      "migrationSha256": "bb87182fcedd4d6da780b4e5d1298cbdfe719a5d7ddd5bb7841950fbbf761be2"
+    },
+    "kernels/fft.cpp": {
+      "upstreamSha256": "8cd24a02f6ceb59f2de99891c7bcad4e63e17b8237ec5184a3579c07a7930a3d",
+      "origin": "kernels/fft.cpp",
+      "migrationSha256": "8cd24a02f6ceb59f2de99891c7bcad4e63e17b8237ec5184a3579c07a7930a3d"
+    },
+    "kernels/fft.h": {
+      "upstreamSha256": "56050a87f28dfac368cc6889da39fd53b5622a0838648248c645d508e411ec80",
+      "origin": "kernels/fft.h",
+      "migrationSha256": "56050a87f28dfac368cc6889da39fd53b5622a0838648248c645d508e411ec80"
+    },
+    "kernels/fft_convolve.cpp": {
+      "upstreamSha256": "9ea0cdebf679f3525267f5bae237c4b1f211cdbd359f0aca30c4485bdc3e5244",
+      "origin": "kernels/fft_convolve.cpp",
+      "migrationSha256": "9ea0cdebf679f3525267f5bae237c4b1f211cdbd359f0aca30c4485bdc3e5244"
+    },
+    "kernels/fft_convolve.h": {
+      "upstreamSha256": "e0f1342c17d3868f61254946e2051a107081e2f654da6fe19b95d22a066abc0f",
+      "origin": "kernels/fft_convolve.h",
+      "migrationSha256": "e0f1342c17d3868f61254946e2051a107081e2f654da6fe19b95d22a066abc0f"
+    },
+    "kernels/gaussian.cpp": {
+      "upstreamSha256": "b6b36cc2d596b152e5c385158d0a9e4f9b75278f5f568e7a55c15ca531577bce",
+      "origin": "kernels/gaussian.cpp",
+      "migrationSha256": "b6b36cc2d596b152e5c385158d0a9e4f9b75278f5f568e7a55c15ca531577bce"
+    },
+    "kernels/gaussian.h": {
+      "upstreamSha256": "b21616822afdcf03267a8384066350dfc9a8737fd4f7e87325f7129665f82e76",
+      "origin": "kernels/gaussian.h",
+      "migrationSha256": "b21616822afdcf03267a8384066350dfc9a8737fd4f7e87325f7129665f82e76"
+    },
+    "kernels/gaussian_hwy.cpp": {
+      "upstreamSha256": "2a53a238e86ec119415e94557e5e775e330909eddf081b0b59ad422784d60309",
+      "origin": "kernels/gaussian_hwy.cpp",
+      "migrationSha256": "2a53a238e86ec119415e94557e5e775e330909eddf081b0b59ad422784d60309"
+    },
+    "kernels/gaussian_hwy.h": {
+      "upstreamSha256": "497d14ecc742ff01ce5bed362a30d65f75eabbe44666dc749474c24ef4ac789d",
+      "origin": "kernels/gaussian_hwy.h",
+      "migrationSha256": "497d14ecc742ff01ce5bed362a30d65f75eabbe44666dc749474c24ef4ac789d"
+    },
+    "kernels/half.cpp": {
+      "upstreamSha256": "2f3c8e7902ccc01d02dee5bb326034f9b9d3758d4abca59153b320abeba1d746",
+      "origin": "kernels/half.cpp",
+      "migrationSha256": "2f3c8e7902ccc01d02dee5bb326034f9b9d3758d4abca59153b320abeba1d746"
+    },
+    "kernels/half.h": {
+      "upstreamSha256": "be14c1e0f78ddb3df00a51b9e519067d87f4c044b696b7ccc164b84b5437386e",
+      "origin": "kernels/half.h",
+      "migrationSha256": "be14c1e0f78ddb3df00a51b9e519067d87f4c044b696b7ccc164b84b5437386e"
+    },
+    "kernels/interp.cpp": {
+      "upstreamSha256": "de67482eb3c1cb5edb8a690ee7a708d33d49604d89342e00001ffac76283c4a8",
+      "origin": "kernels/interp.cpp",
+      "migrationSha256": "de67482eb3c1cb5edb8a690ee7a708d33d49604d89342e00001ffac76283c4a8"
+    },
+    "kernels/interp.h": {
+      "upstreamSha256": "742e33f75fccf451b231c61e320b003d7b9151e58324f7f16382ef5e716b9fba",
+      "origin": "kernels/interp.h",
+      "migrationSha256": "742e33f75fccf451b231c61e320b003d7b9151e58324f7f16382ef5e716b9fba"
+    },
+    "kernels/lut3d.cpp": {
+      "upstreamSha256": "f1e287ee3dacdced081f1aff1a8237ff581856632da14a65992da30cd4edd4db",
+      "origin": "kernels/lut3d.cpp",
+      "migrationSha256": "f1e287ee3dacdced081f1aff1a8237ff581856632da14a65992da30cd4edd4db"
+    },
+    "kernels/lut3d.h": {
+      "upstreamSha256": "d260f86daee14bfa0b0b56c622f5b737b0239bbf540478c56bcc51f322165fca",
+      "origin": "kernels/lut3d.h",
+      "migrationSha256": "d260f86daee14bfa0b0b56c622f5b737b0239bbf540478c56bcc51f322165fca"
+    },
+    "kernels/lut3d_cache.cpp": {
+      "upstreamSha256": "c317fa492e45ac994a5b9afe3df88d71f9965d11ceb9fd2483588421b5b39d10",
+      "origin": "kernels/lut3d_cache.cpp",
+      "migrationSha256": "c317fa492e45ac994a5b9afe3df88d71f9965d11ceb9fd2483588421b5b39d10"
+    },
+    "kernels/lut3d_cache.h": {
+      "upstreamSha256": "fd58f7cce5e6486ed983975f6aa9fe5a93a61f2fd7bc42770f58bc0fcfa2e9a7",
+      "origin": "kernels/lut3d_cache.h",
+      "migrationSha256": "fd58f7cce5e6486ed983975f6aa9fe5a93a61f2fd7bc42770f58bc0fcfa2e9a7"
+    },
+    "kernels/parallel.cpp": {
+      "upstreamSha256": "403e10ffceccafb7c75df6be1649aacbbc5aaba4f7a825e05a4006f9daffab91",
+      "origin": "kernels/parallel.cpp",
+      "migrationSha256": "403e10ffceccafb7c75df6be1649aacbbc5aaba4f7a825e05a4006f9daffab91"
+    },
+    "kernels/parallel.h": {
+      "upstreamSha256": "ee52e4093c9a4c9c496f000ed5e0fe7e465219483b47176f63accd903cf0d9df",
+      "origin": "kernels/parallel.h",
+      "migrationSha256": "ee52e4093c9a4c9c496f000ed5e0fe7e465219483b47176f63accd903cf0d9df"
+    },
+    "kernels/spectral_upsampling.cpp": {
+      "upstreamSha256": "f296f5e24f74adba3ea026871b28590a7ff1b6cffadad73553e05460c7d0065f",
+      "origin": "kernels/spectral_upsampling.cpp",
+      "migrationSha256": "923b13b25e8cabd9ea393d6843744c0647e64a4b519760923b27b1dd7a1888b6"
+    },
+    "kernels/spectral_upsampling.h": {
+      "upstreamSha256": "47174c7bf5b644fb73eaade897261cc92abec9f9dedba866838f31f6ec28934b",
+      "origin": "kernels/spectral_upsampling.h",
+      "migrationSha256": "47174c7bf5b644fb73eaade897261cc92abec9f9dedba866838f31f6ec28934b"
+    },
+    "kernels/stats.cpp": {
+      "upstreamSha256": "3bc3f8858f023773227ea901da66e10283f9114cf39a1b16d2fddd3a3ab96c76",
+      "origin": "kernels/stats.cpp",
+      "migrationSha256": "3bc3f8858f023773227ea901da66e10283f9114cf39a1b16d2fddd3a3ab96c76"
+    },
+    "kernels/stats.h": {
+      "upstreamSha256": "d89d352a1b27c506e165f517007b18ed5e3bc6522f47a5cbb9712d02a1234397",
+      "origin": "kernels/stats.h",
+      "migrationSha256": "d89d352a1b27c506e165f517007b18ed5e3bc6522f47a5cbb9712d02a1234397"
+    },
+    "kernels/tonecurve.cpp": {
+      "upstreamSha256": "50aa6da94a185399292595852b501943c980ab26d47f4e1468101017504fbcbd",
+      "origin": "kernels/tonecurve.cpp",
+      "migrationSha256": "50aa6da94a185399292595852b501943c980ab26d47f4e1468101017504fbcbd"
+    },
+    "kernels/tonecurve.h": {
+      "upstreamSha256": "e7a7d5b6c6e30a52316e9c112fd9bfdc222ddcc7c9dce9f4d5a6b3c4f6e0654e",
+      "origin": "kernels/tonecurve.h",
+      "migrationSha256": "e7a7d5b6c6e30a52316e9c112fd9bfdc222ddcc7c9dce9f4d5a6b3c4f6e0654e"
+    },
+    "kernels/uniform_axis.h": {
+      "upstreamSha256": "f1a08b419a0927e9ba53f414ac628b2a5fa2b4dfa982c5808d160c84c2e882e5",
+      "origin": "kernels/uniform_axis.h",
+      "migrationSha256": "f1a08b419a0927e9ba53f414ac628b2a5fa2b4dfa982c5808d160c84c2e882e5"
+    },
+    "model/color_filters.cpp": {
+      "upstreamSha256": "78831dd9545495e63a080d104b0da0ed19962a74f05b04fbf95ee4857e59d206",
+      "origin": "model/color_filters.cpp",
+      "migrationSha256": "78831dd9545495e63a080d104b0da0ed19962a74f05b04fbf95ee4857e59d206"
+    },
+    "model/color_filters.h": {
+      "upstreamSha256": "182ea704af142dda62dc37eee2d221ead1521910f6413041b88121a20eb79abb",
+      "origin": "model/color_filters.h",
+      "migrationSha256": "182ea704af142dda62dc37eee2d221ead1521910f6413041b88121a20eb79abb"
+    },
+    "model/color_output.cpp": {
+      "upstreamSha256": "80bd201683a32ed665528b628d53c249df73e464e6630f725a026ce067716510",
+      "origin": "model/color_output.cpp",
+      "migrationSha256": "80bd201683a32ed665528b628d53c249df73e464e6630f725a026ce067716510"
+    },
+    "model/color_output.h": {
+      "upstreamSha256": "d4a8a801505acca87b2aea71d32fb3240c162d7bc8644b3f29fe82d77fd02596",
+      "origin": "model/color_output.h",
+      "migrationSha256": "d4a8a801505acca87b2aea71d32fb3240c162d7bc8644b3f29fe82d77fd02596"
+    },
+    "model/conversions.cpp": {
+      "upstreamSha256": "01dcb8265693b4e950b9c9a0476ad3034029476e684a37fd3ff451d409ffdd36",
+      "origin": "model/conversions.cpp",
+      "migrationSha256": "01dcb8265693b4e950b9c9a0476ad3034029476e684a37fd3ff451d409ffdd36"
+    },
+    "model/conversions.h": {
+      "upstreamSha256": "cc6d3f89f9183b75f6568322e9e9a4f3fa19637c211a8952cbba685b0a0e5f35",
+      "origin": "model/conversions.h",
+      "migrationSha256": "cc6d3f89f9183b75f6568322e9e9a4f3fa19637c211a8952cbba685b0a0e5f35"
+    },
+    "model/couplers.cpp": {
+      "upstreamSha256": "f293165eab58905b489f0bbbf9eedca83d02c4a07e8b2673e8ea0663d8aceaf6",
+      "origin": "model/couplers.cpp",
+      "migrationSha256": "f293165eab58905b489f0bbbf9eedca83d02c4a07e8b2673e8ea0663d8aceaf6"
+    },
+    "model/couplers.h": {
+      "upstreamSha256": "b15355bc184a6180f04ad6eb459aabae9511c0e0dc6ce0a685970192cfe420e6",
+      "origin": "model/couplers.h",
+      "migrationSha256": "b15355bc184a6180f04ad6eb459aabae9511c0e0dc6ce0a685970192cfe420e6"
+    },
+    "model/density_curves.cpp": {
+      "upstreamSha256": "2c9d3f806e7f3b6bad1ce2677c9ec16dfa908b265146875172aa2e6a1e5c0599",
+      "origin": "model/density_curves.cpp",
+      "migrationSha256": "2c9d3f806e7f3b6bad1ce2677c9ec16dfa908b265146875172aa2e6a1e5c0599"
+    },
+    "model/density_curves.h": {
+      "upstreamSha256": "40d5a5cffe630940eeaf0e50dce6e7082807e8a8ae90d855bbdf6c344448e213",
+      "origin": "model/density_curves.h",
+      "migrationSha256": "40d5a5cffe630940eeaf0e50dce6e7082807e8a8ae90d855bbdf6c344448e213"
+    },
+    "model/diffusion.cpp": {
+      "upstreamSha256": "af72498e6eac89adbdc9af536ce49c7660ae515fdda8f226ba9da727cbcee99a",
+      "origin": "model/diffusion.cpp",
+      "migrationSha256": "f8f089f3aa2002f8ab8d6d4e2c91cb333be5422ce45c146eedb8221a4e84b614"
+    },
+    "model/diffusion.h": {
+      "upstreamSha256": "5f8b2a3377567a64b4e9824eb6eae3939fbfa74401fd7931cb0e96cb3dad50df",
+      "origin": "model/diffusion.h",
+      "migrationSha256": "5f8b2a3377567a64b4e9824eb6eae3939fbfa74401fd7931cb0e96cb3dad50df"
+    },
+    "model/emulsion.cpp": {
+      "upstreamSha256": "9db8b66ce3e979b592fb58510c46c6d02568ce9a1680694a15c29a849d0e4500",
+      "origin": "model/emulsion.cpp",
+      "migrationSha256": "9db8b66ce3e979b592fb58510c46c6d02568ce9a1680694a15c29a849d0e4500"
+    },
+    "model/emulsion.h": {
+      "upstreamSha256": "43b543a3fdfd86cfbfc292801d3b479865028ea06360e0229a053a39275e00a3",
+      "origin": "model/emulsion.h",
+      "migrationSha256": "43b543a3fdfd86cfbfc292801d3b479865028ea06360e0229a053a39275e00a3"
+    },
+    "model/gamut_compression.cpp": {
+      "upstreamSha256": "644adcd4029e0f0893b0fe7c4a2af7bd06458622691a152c8dab7fe943dbee1a",
+      "origin": "model/gamut_compression.cpp",
+      "migrationSha256": "7152744f11755add63e4dd6d17a3df204b98a7d6c1656ee2c823af27f23dc05c"
+    },
+    "model/gamut_compression.h": {
+      "upstreamSha256": "472b9b08df6ba79b0c7a6ac91f777c0707b8096cdb8b9b802d080e23e534c540",
+      "origin": "model/gamut_compression.h",
+      "migrationSha256": "472b9b08df6ba79b0c7a6ac91f777c0707b8096cdb8b9b802d080e23e534c540"
+    },
+    "model/glare.cpp": {
+      "upstreamSha256": "69fa80715c78b4b9883a556c187393d83d72121adce4ca391e33b0c69470b707",
+      "origin": "model/glare.cpp",
+      "migrationSha256": "69fa80715c78b4b9883a556c187393d83d72121adce4ca391e33b0c69470b707"
+    },
+    "model/glare.h": {
+      "upstreamSha256": "7cf4388d4b951f35a3f6ea09148f30642f4aee33a838ec5cd01ca683d4d237c6",
+      "origin": "model/glare.h",
+      "migrationSha256": "7cf4388d4b951f35a3f6ea09148f30642f4aee33a838ec5cd01ca683d4d237c6"
+    },
+    "model/grain.cpp": {
+      "upstreamSha256": "34e864ee7afe8fa407687ac23650a9f5fa77895dcb278f4cf84fa52405145e34",
+      "origin": "model/grain.cpp",
+      "migrationSha256": "c8fc225e39e71e5b2934a64e2605f4234e07790897a89d30057be4b35b7a87ff"
+    },
+    "model/grain.h": {
+      "upstreamSha256": "634978b9b92c98c81e45a319537986563fbcb1288624fe0500e56d39172a3114",
+      "origin": "model/grain.h",
+      "migrationSha256": "634978b9b92c98c81e45a319537986563fbcb1288624fe0500e56d39172a3114"
+    },
+    "model/morph_curves.cpp": {
+      "upstreamSha256": "91b82a05209140a2e90d645dac83dd49374de10d1e59155a934c42527dcbb3f2",
+      "origin": "model/morph_curves.cpp",
+      "migrationSha256": "91b82a05209140a2e90d645dac83dd49374de10d1e59155a934c42527dcbb3f2"
+    },
+    "model/morph_curves.h": {
+      "upstreamSha256": "ef5fac8593b2921725d0c44312d38865c7d3644f3dd393620d1fbe08a59b13f5",
+      "origin": "model/morph_curves.h",
+      "migrationSha256": "ef5fac8593b2921725d0c44312d38865c7d3644f3dd393620d1fbe08a59b13f5"
+    },
+    "model/spectral.cpp": {
+      "upstreamSha256": "0c79316621978c9f3ff3c66c42547147961228482fcc77570f2d525aa2ba839e",
+      "origin": "model/spectral.cpp",
+      "migrationSha256": "0c79316621978c9f3ff3c66c42547147961228482fcc77570f2d525aa2ba839e"
+    },
+    "model/spectral.h": {
+      "upstreamSha256": "dd138a41bf5f4bf27f3403de67af3ca7965316654bea9b0889d3ccde9b0eb5c2",
+      "origin": "model/spectral.h",
+      "migrationSha256": "dd138a41bf5f4bf27f3403de67af3ca7965316654bea9b0889d3ccde9b0eb5c2"
+    },
+    "profiles/json_min.h": {
+      "upstreamSha256": "c79b827af485b7c3b0c4fbd84bf880e3e8eff5ebf90b5a4b58c915b9999fd958",
+      "origin": "profiles/json_min.h",
+      "migrationSha256": "c79b827af485b7c3b0c4fbd84bf880e3e8eff5ebf90b5a4b58c915b9999fd958"
+    },
+    "profiles/profile.cpp": {
+      "upstreamSha256": "1d4ee4d9098ef7b44f120dd8e1c3aa02da84664e2e8a5f959c3f6daa45c65a59",
+      "origin": "profiles/profile.cpp",
+      "migrationSha256": "1d4ee4d9098ef7b44f120dd8e1c3aa02da84664e2e8a5f959c3f6daa45c65a59"
+    },
+    "profiles/profile.h": {
+      "upstreamSha256": "835b1c866db80788a6855cf91ac9f984cd9470945f860fde6371a31823d4cf57",
+      "origin": "profiles/profile.h",
+      "migrationSha256": "835b1c866db80788a6855cf91ac9f984cd9470945f860fde6371a31823d4cf57"
+    },
+    "runtime/color_reference.cpp": {
+      "upstreamSha256": "dd63c02cb12223b225626af942ba49a9158050877f2d2e248a46e3ff1b1d0e3b",
+      "origin": "runtime/color_reference.cpp",
+      "migrationSha256": "dd63c02cb12223b225626af942ba49a9158050877f2d2e248a46e3ff1b1d0e3b"
+    },
+    "runtime/color_reference.h": {
+      "upstreamSha256": "8ddccb050ce8b0221eb3ba097c277e37cee9441713f63dac43076b08be3620f9",
+      "origin": "runtime/color_reference.h",
+      "migrationSha256": "8ddccb050ce8b0221eb3ba097c277e37cee9441713f63dac43076b08be3620f9"
+    },
+    "runtime/memory_budget.h": {
+      "upstreamSha256": "8f01de5b767d84175d08e3b28bf76072e042e90bf8a04bc4c5ae588eb80077cd",
+      "origin": "runtime/memory_budget.h",
+      "migrationSha256": "8f01de5b767d84175d08e3b28bf76072e042e90bf8a04bc4c5ae588eb80077cd"
+    },
+    "runtime/params.cpp": {
+      "upstreamSha256": "d16f92956431850565f626ffe6dc095a16075fb08952db17730ca85364431192",
+      "origin": "runtime/params.cpp",
+      "migrationSha256": "d16f92956431850565f626ffe6dc095a16075fb08952db17730ca85364431192"
+    },
+    "runtime/params.h": {
+      "upstreamSha256": "467316b953a1365a43b4ad0432cb3e3758a0609cbf5da86469fa5ce12a22e869",
+      "origin": "runtime/params.h",
+      "migrationSha256": "467316b953a1365a43b4ad0432cb3e3758a0609cbf5da86469fa5ce12a22e869"
+    },
+    "runtime/params_manifest.h": {
+      "upstreamSha256": "60925522073366fd96a7062971df0625bdb474d2ea11c4b477eeb48a4fbb2371",
+      "origin": "runtime/params_manifest.h",
+      "migrationSha256": "60925522073366fd96a7062971df0625bdb474d2ea11c4b477eeb48a4fbb2371"
+    },
+    "runtime/print_digest.cpp": {
+      "upstreamSha256": "0c7777e46947d79dddb06d12a2509199c661de7f61bbe3fa28440ca2f2c81722",
+      "origin": "runtime/print_digest.cpp",
+      "migrationSha256": "e186f0a6260eefd49dabd3fc22d6aeda64d3817340cab86b8001df73a74922e3"
+    },
+    "runtime/print_digest.h": {
+      "upstreamSha256": "56382910fcef1afd4a1aad9fa66e5c8c435626144b88dbdda61c6ad900f9ba58",
+      "origin": "runtime/print_digest.h",
+      "migrationSha256": "56382910fcef1afd4a1aad9fa66e5c8c435626144b88dbdda61c6ad900f9ba58"
+    },
+    "runtime/stage_timer.h": {
+      "upstreamSha256": "6638ee66e2527768b9f4c7d04fd86f805ef700d5dffbb93fd896f9ddf28e6646",
+      "origin": "runtime/stage_timer.h",
+      "migrationSha256": "6638ee66e2527768b9f4c7d04fd86f805ef700d5dffbb93fd896f9ddf28e6646"
+    },
+    "runtime/tc_lut_cache.cpp": {
+      "upstreamSha256": "2bb871d15a5443d446bed30ef7824af058d855b7f8b95c92b25fd6287fd3b3d1",
+      "origin": "runtime/tc_lut_cache.cpp",
+      "migrationSha256": "2bb871d15a5443d446bed30ef7824af058d855b7f8b95c92b25fd6287fd3b3d1"
+    },
+    "runtime/tc_lut_cache.h": {
+      "upstreamSha256": "d9d4bda049db9d21317ea0194bd4e48e3855f1d55b1fe4c66df3373d110eb6e1",
+      "origin": "runtime/tc_lut_cache.h",
+      "migrationSha256": "d9d4bda049db9d21317ea0194bd4e48e3855f1d55b1fe4c66df3373d110eb6e1"
+    },
+    "runtime/stages/autoexposure.cpp": {
+      "upstreamSha256": "0d52cc6605a4087ad9184d38a59e0bb911a7133238f4b572ab8c96a874bb4f67",
+      "origin": "runtime/stages/autoexposure.cpp",
+      "migrationSha256": "0d52cc6605a4087ad9184d38a59e0bb911a7133238f4b572ab8c96a874bb4f67"
+    },
+    "runtime/stages/autoexposure.h": {
+      "upstreamSha256": "5b7954e93881b3622b6abb671dcac56b302829b9895fb8383e1a211c2a50160f",
+      "origin": "runtime/stages/autoexposure.h",
+      "migrationSha256": "5b7954e93881b3622b6abb671dcac56b302829b9895fb8383e1a211c2a50160f"
+    },
+    "runtime/stages/crop_resize.cpp": {
+      "upstreamSha256": "32c9c71ff7088754f9141b8ab8272b1179bb882177d54b67b857d0f05a1e8dfa",
+      "origin": "runtime/stages/crop_resize.cpp",
+      "migrationSha256": "32c9c71ff7088754f9141b8ab8272b1179bb882177d54b67b857d0f05a1e8dfa"
+    },
+    "runtime/stages/crop_resize.h": {
+      "upstreamSha256": "63e602bcb09672080af2d2f4850bee30da621add5933ceb9f0a023a8ef29e1ef",
+      "origin": "runtime/stages/crop_resize.h",
+      "migrationSha256": "63e602bcb09672080af2d2f4850bee30da621add5933ceb9f0a023a8ef29e1ef"
+    },
+    "runtime/stages/filming.cpp": {
+      "upstreamSha256": "ac126964e19487333d992682ffb59b3ff28197e9745df3427e4c3ed3ee22bd9b",
+      "origin": "runtime/stages/filming.cpp",
+      "migrationSha256": "2ab269096df9768e2bf67631e3a95ffad4fe72708acd84bde97b71775edfc18c"
+    },
+    "runtime/stages/filming.h": {
+      "upstreamSha256": "b12121cbd37c739fdd14ba4274f4f51c5d427cc446ce9aec057c5a261c534d07",
+      "origin": "runtime/stages/filming.h",
+      "migrationSha256": "b12121cbd37c739fdd14ba4274f4f51c5d427cc446ce9aec057c5a261c534d07"
+    },
+    "runtime/stages/printing.cpp": {
+      "upstreamSha256": "1e6703af5927618a43f8f4e93e1b3abd1553e60d5e69ffa83f67ba3b8ab98221",
+      "origin": "runtime/stages/printing.cpp",
+      "migrationSha256": "7d0d52b747d736abf2466ccbd5d127ba060b8c5b5fc25167e485fd367bcad19c"
+    },
+    "runtime/stages/printing.h": {
+      "upstreamSha256": "91daf7d70bc243aa60fd8e2ad237b997fffe763654ad00b2879dd20ad0cd4a1b",
+      "origin": "runtime/stages/printing.h",
+      "migrationSha256": "91daf7d70bc243aa60fd8e2ad237b997fffe763654ad00b2879dd20ad0cd4a1b"
+    },
+    "runtime/stages/scanning.cpp": {
+      "upstreamSha256": "d2e0404291875bd4053caaf95b45838fd659eee9f8f0eddf9bfef8a7fbd1e091",
+      "origin": "runtime/stages/scanning.cpp",
+      "migrationSha256": "812428d1e0f61022adb7cfca8bef4e242b169b25fd28d60f21eddd79a9047e96"
+    },
+    "runtime/stages/scanning.h": {
+      "upstreamSha256": "e16667d14b9c0ea5dee0980a967b39f79210873aca537fcbc8ad7f8d1818bd58",
+      "origin": "runtime/stages/scanning.h",
+      "migrationSha256": "e16667d14b9c0ea5dee0980a967b39f79210873aca537fcbc8ad7f8d1818bd58"
+    },
+    "adapter/resident.cpp": {
+      "origin": "local adapter",
+      "migrationSha256": "6f70704b25919ee42a1fb44b93a76a75ff5cae06cb7fd6e755d361478844fdcc"
+    },
+    "adapter/resident.h": {
+      "origin": "local adapter",
+      "migrationSha256": "6ea150e19e92d5914ac1f65d62e90a6bee65a71ea44f77f51f10e95402da8eef"
+    },
+    "adapter/resident_spatial.h": {
+      "origin": "local adapter",
+      "migrationSha256": "9b28cc768117e3ad6cd07757a21a62f61a1ef254e683f6e7bedd61655669a32b"
+    },
+    "adapter/full.comp": {
+      "origin": "local adapter",
+      "migrationSha256": "b8fa9523ad88de1ed9829fa3b524524f1afad459eac0dab68fdee999d2f15309"
+    },
+    "precompiled/cctf_encode_spv.inc": {
+      "upstreamSha256": "b59ce8814eb06c7f642423c0bd18ae9adc72f4df4bdcb4ef5274d785e2334308",
+      "origin": "gpu/cctf_encode_spv.inc",
+      "migrationSha256": "b59ce8814eb06c7f642423c0bd18ae9adc72f4df4bdcb4ef5274d785e2334308"
+    },
+    "precompiled/fft_convolve_spv.inc": {
+      "upstreamSha256": "f233dc5b0bc043f1ddad3c7a0148ab13ff5901023832e235048189e4d2f771c2",
+      "origin": "gpu/fft_convolve_spv.inc",
+      "migrationSha256": "f233dc5b0bc043f1ddad3c7a0148ab13ff5901023832e235048189e4d2f771c2"
+    },
+    "precompiled/filming_spv.inc": {
+      "upstreamSha256": "da7d2d0594e8776246db7e592c7b93e32e814de096bff97eb1b501600bb2c23e",
+      "origin": "gpu/filming_spv.inc",
+      "migrationSha256": "da7d2d0594e8776246db7e592c7b93e32e814de096bff97eb1b501600bb2c23e"
+    },
+    "precompiled/filming_stage_spv.inc": {
+      "upstreamSha256": "f229d950b57c8c49bad51f63fa1a9c3cd46dd21b6edf19fd47a566ca7f6d8c9f",
+      "origin": "gpu/filming_stage_spv.inc",
+      "migrationSha256": "f229d950b57c8c49bad51f63fa1a9c3cd46dd21b6edf19fd47a566ca7f6d8c9f"
+    },
+    "precompiled/glare_spv.inc": {
+      "upstreamSha256": "88715fd390e5ba1ae6f46cf20f6c8956cef1af860d8ff428c15391ec3c1d5675",
+      "origin": "gpu/glare_spv.inc",
+      "migrationSha256": "88715fd390e5ba1ae6f46cf20f6c8956cef1af860d8ff428c15391ec3c1d5675"
+    },
+    "precompiled/grain_spv.inc": {
+      "upstreamSha256": "1ec040445fb43cd1ee13c8a5ba867f8e2836b90d276242ea2e6ccadb97b9e2cd",
+      "origin": "gpu/grain_spv.inc",
+      "migrationSha256": "1ec040445fb43cd1ee13c8a5ba867f8e2836b90d276242ea2e6ccadb97b9e2cd"
+    },
+    "precompiled/halation_scatter_spv.inc": {
+      "upstreamSha256": "7ba434241edf29a4ab05dc55de4f275543365892a4895bb9ebed797fad6b2c42",
+      "origin": "gpu/halation_scatter_spv.inc",
+      "migrationSha256": "7ba434241edf29a4ab05dc55de4f275543365892a4895bb9ebed797fad6b2c42"
+    },
+    "precompiled/printing_spv.inc": {
+      "upstreamSha256": "e6ae02ba702b91137877f7e22e1d4c03c2bf499933112e721d92bcb323f58c8e",
+      "origin": "gpu/printing_spv.inc",
+      "migrationSha256": "e6ae02ba702b91137877f7e22e1d4c03c2bf499933112e721d92bcb323f58c8e"
+    },
+    "precompiled/scan_spectral_spv.inc": {
+      "upstreamSha256": "3a5ce528eb37ae86aba67b1532ce477ffb0f231ae7d9b36576a76f565fa4936f",
+      "origin": "gpu/scan_spectral_spv.inc",
+      "migrationSha256": "3a5ce528eb37ae86aba67b1532ce477ffb0f231ae7d9b36576a76f565fa4936f"
+    },
+    "precompiled/scan_spectral_chain_spv.inc": {
+      "upstreamSha256": "b2694666d65a8479f2df48ea74edd91aab1aa63a03093d4e4013b72e7fd2d3be",
+      "origin": "gpu/scan_spectral_chain_spv.inc",
+      "migrationSha256": "b2694666d65a8479f2df48ea74edd91aab1aa63a03093d4e4013b72e7fd2d3be"
+    },
+    "precompiled/scan_spectral_lin_spv.inc": {
+      "upstreamSha256": "67abfa1900f409e065db9b2d9f26d005a3059e9447356d6a6215a870f891dcb1",
+      "origin": "gpu/scan_spectral_lin_spv.inc",
+      "migrationSha256": "67abfa1900f409e065db9b2d9f26d005a3059e9447356d6a6215a870f891dcb1"
+    }
+  }
+}

@@ -1,0 +1,109 @@
+#version 450
+#ifdef FC_RELAXED
+#define FC_PRECISE
+#else
+#define FC_PRECISE precise
+#endif
+layout(local_size_x=16,local_size_y=16,local_size_x_id=0,local_size_y_id=1) in;
+layout(std430,binding=0) readonly buffer Raw { uint raw[]; };
+layout(std430,binding=1) buffer Parameters { uint p[]; };
+layout(std430,binding=2) buffer Mosaic { float cfa[]; };
+layout(std430,binding=3) buffer Green { float green[]; };
+layout(std430,binding=4) buffer Rgb { float rgb[]; };
+layout(std430,binding=5) buffer Horizontal { float horizontal[]; };
+layout(std430,binding=6) buffer Output { float outputRgb[]; };
+layout(push_constant) uniform Pass { uint pass; } pc;
+float f(uint i) { return uintBitsToFloat(p[i]); }
+int mirror(int x,int n) { return x<0 ? -x : (x>=n ? 2*n-2-x : x); }
+uint site(int x,int y) { return uint(((y+int(p[5]))&1)*2+((x+int(p[4]))&1)); }
+float c(int x,int y) { return cfa[mirror(y,int(p[1]))*int(p[0])+mirror(x,int(p[0]))]; }
+float g(int x,int y) { return green[mirror(y,int(p[1]))*int(p[0])+mirror(x,int(p[0]))]; }
+float shade(uint channel,uint x,uint y) {
+    FC_PRECISE float gx=float(x)/float(p[0]-1)*(float(p[8])-1);
+    FC_PRECISE float gy=float(y)/float(p[1]-1)*(float(p[9])-1);
+    uint ix=uint(gx),iy=uint(gy),jx=min(ix+1,p[8]-1),jy=min(iy+1,p[9]-1);
+    FC_PRECISE float fx=gx-float(ix),fy=gy-float(iy);
+    FC_PRECISE float a=f(p[14]+(iy*p[8]+ix)*4+channel),b=f(p[14]+(iy*p[8]+jx)*4+channel);
+    FC_PRECISE float c0=f(p[14]+(jy*p[8]+ix)*4+channel),d=f(p[14]+(jy*p[8]+jx)*4+channel);
+    FC_PRECISE float value=(a+(b-a)*fx)*(1-fy)+(c0+(d-c0)*fx)*fy;
+    return value;
+}
+void writeOutput(vec3 sum,uint x,uint y) {
+    uint index=y*p[2]+x;
+        FC_PRECISE vec3 rec;
+        for(uint channel=0;channel<3;channel++) {
+            rec[channel]=f(29+channel*3)*sum.x+f(30+channel*3)*sum.y+f(31+channel*3)*sum.z;
+        }
+        FC_PRECISE vec3 converted=rec;
+        if(p[38]==1) {
+            // CAT16 Rec.2020 D65 -> linear ProPhoto D50; no clipping or exposure.
+            converted.x=.8135929278602886*rec.x+.05952871161117486*rec.y+.12705749581445122*rec.z;
+            converted.y=.04234095353045031*rec.x+.9233873261332325*rec.y+.03423093930423864*rec.z;
+            converted.z=-.003466230634951545*rec.x+.016734144578857215*rec.y+.9870063956795253*rec.z;
+            if(p[39]==90) index=x*p[3]+(p[3]-1-y);
+            else if(p[39]==180) index=(p[3]-1-y)*p[2]+p[2]-1-x;
+            else if(p[39]==270) index=(p[2]-1-x)*p[3]+y;
+        }
+        for(uint channel=0;channel<3;channel++) {
+            float value=converted[channel];
+            if(isnan(value) || isinf(value)) atomicOr(p[15],1u);
+            outputRgb[index*3+channel]=value;
+        }
+}
+void main() {
+    uint x=gl_GlobalInvocationID.x,y=gl_GlobalInvocationID.y;
+    uint width=pc.pass<3 ? p[0] : p[2];
+    uint height=pc.pass<4 ? p[1] : p[3];
+    if(x>=width || y>=height) return;
+    uint index=y*width+x;int ix=int(x),iy=int(y);
+    if(pc.pass==5) {ix=int(p[p[12]+2*p[p[10]+x]]);iy=int(p[p[13]+2*p[p[11]+y]]);}
+    if(pc.pass==0) {
+        uint offset=(y+p[5])*p[6]+(x+p[4])*p[7];
+        // RAW_SENSOR is little endian; accept odd byte strides without requiring 16-bit storage.
+        uint lo=(raw[offset/4]>>((offset%4)*8))&255;
+        uint hi=(raw[(offset+1)/4]>>(((offset+1)%4)*8))&255;
+        uint s=site(ix,iy),channel=p[16+s];
+        precise float v=max(0.0,(float(lo+hi*256)-f(20+s))/(f(24)-f(20+s)))*f(25+channel)*shade(channel,x,y);
+        cfa[index]=v;
+    } else if(pc.pass==1) {
+        uint channel=p[16+site(ix,iy)];
+        FC_PRECISE float center=c(ix,iy),left=c(ix-1,iy),right=c(ix+1,iy),above=c(ix,iy-1),below=c(ix,iy+1);
+        FC_PRECISE float dh=abs(left-right),dv=abs(above-below);
+        FC_PRECISE float h=(left+right)*.5,v=(above+below)*.5;
+        FC_PRECISE float direction=clamp(3*(dv-dh)/(dv+dh+1e-4),-1.0,1.0);
+        FC_PRECISE float value=(channel==1 || channel==2) ? center : h*(.5+.5*direction)+v*(.5-.5*direction);
+        green[index]=value;
+    } else if(pc.pass==2 || pc.pass==5) {
+        uint channel=p[16+site(ix,iy)];
+        FC_PRECISE float gg=g(ix,iy),r,b;
+        if(channel==0 || channel==3) {
+            FC_PRECISE float a=c(ix-1,iy-1),b0=c(ix+1,iy-1),c0=c(ix-1,iy+1),d=c(ix+1,iy+1);
+            FC_PRECISE float estimate=gg+((a-g(ix-1,iy-1))+(b0-g(ix+1,iy-1))+(c0-g(ix-1,iy+1))+(d-g(ix+1,iy+1)))*.25;
+            FC_PRECISE float opposite=clamp(estimate,min(min(a,b0),min(c0,d)),max(max(a,b0),max(c0,d)));
+            r=channel==0 ? c(ix,iy) : opposite;b=channel==3 ? c(ix,iy) : opposite;
+        } else {
+            FC_PRECISE float left=c(ix-1,iy),right=c(ix+1,iy),above=c(ix,iy-1),below=c(ix,iy+1);
+            FC_PRECISE float hh=clamp(gg+(left-g(ix-1,iy)+right-g(ix+1,iy))*.5,min(left,right),max(left,right));
+            FC_PRECISE float vv=clamp(gg+(above-g(ix,iy-1)+below-g(ix,iy+1))*.5,min(above,below),max(above,below));
+            uint hc=p[16+site(ix+1,iy)];r=hc==0 ? hh : vv;b=hc==3 ? hh : vv;
+        }
+        if(pc.pass==5) {writeOutput(vec3(r,gg,b),x,y);return;}
+        rgb[index*3]=r;rgb[index*3+1]=gg;rgb[index*3+2]=b;
+    } else if(pc.pass==3) {
+        FC_PRECISE vec3 sum=vec3(0);
+        for(uint j=p[p[10]+x];j<p[p[10]+x+1];j++) {
+            uint a=p[12]+j*2,base=(y*p[0]+p[a])*3;
+            FC_PRECISE float weight=f(a+1);
+            sum+=vec3(rgb[base],rgb[base+1],rgb[base+2])*weight;
+        }
+        horizontal[index*3]=sum.x;horizontal[index*3+1]=sum.y;horizontal[index*3+2]=sum.z;
+    } else {
+        FC_PRECISE vec3 sum=vec3(0);
+        for(uint j=p[p[11]+y];j<p[p[11]+y+1];j++) {
+            uint a=p[13]+j*2,base=(p[a]*p[2]+x)*3;
+            FC_PRECISE float weight=f(a+1);
+            sum+=vec3(horizontal[base],horizontal[base+1],horizontal[base+2])*weight;
+        }
+        writeOutput(sum,x,y);
+    }
+}

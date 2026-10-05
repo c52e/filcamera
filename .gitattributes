@@ -1,0 +1,5 @@
+# Preserve qualified source/shader and model-data bytes across Windows/Linux
+# checkouts. These trees contain recorded SHA-256 pairs; autocrlf must not alter
+# them. -text disables newline conversion, not ordinary text diff/review.
+/app/native/engine/** -text
+/app/model-data/** -text

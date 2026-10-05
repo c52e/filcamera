@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Spektrafilm Android contributors
+# SPDX-License-Identifier: GPL-3.0-only
+# Generators (glslc.exe from shader-tools/windows-x86_64 of the named NDK):
+#   filming, printing, scan_spectral_chain: Android NDK 27.0.12077973
+#     (reported tool shaderc v2022.3 ndk-r26c; target SPIR-V 1.0). These three
+#     are the qualified pointwise chain of #148 and are NOT regenerated with the
+#     current NDK: a newer glslc emits different bytes for the same source, and
+#     the device evidence for that slice is bound to these exact binaries.
+#   halation_scatter: Android NDK 28.2.13676358, the pinned build NDK (#206).
+#   grain: Android NDK 28.2.13676358, the pinned build NDK (#214).
+#   glare: Android NDK 28.2.13676358, the pinned build NDK (#215).
+#   fft_convolve: Android NDK 28.2.13676358, the pinned build NDK (#216).
+#   filming_stage: Android NDK 28.2.13676358, the pinned build NDK (#218).
+#     It duplicates filming.comp's math ON PURPOSE, split at the log10 so
+#     the spatial stages can run between the halves; filming.comp keeps its
+#     NDK 27 bytes because the #148 device evidence is bound to them.
+# Digests are over LF content, which is what git stores; a Windows working tree
+# checks these files out with CRLF, so normalise before comparing.
+# Exact command (run once for each source/output pair from this directory):
+# glslc.exe -fshader-stage=compute --target-env=vulkan1.1 -mfmt=c -o OUTPUT.inc SOURCE.comp
+61CB82CD5448A571B835FAA1D663155716CFCFCDBC4E238F61DB49F5DC553580  filming.comp
+9BF1685AC7022936DD996973C2241BA5AEC6C5FFD1476726E043C13DD659FDBC  filming_spv.inc
+296062E4D58226F6DFFC4311AA9E2D7F35D8DEA458A5E0367E162605AE810468  printing.comp
+A0BF115571621B0D3F042CA3A0A5B6E5351A2D8010A539AF6136CCFEB86DEABF  printing_spv.inc
+EA6303990DF71A0B6B0A98B1BB0EFAD3BA49FE368210AFCAEB8DCB4EC3E9F0BD  scan_spectral_chain.comp
+D8ED4EEC480EDB5E81E8F734E1B741E9240BF0DD4D881396411A69CDC6AB578B  scan_spectral_chain_spv.inc
+2F5A690E371018FB8D64EF25CB5CFB962ECF3120E87B85BE73BB5F98FD8F002D  halation_scatter.comp
+B99D09592E46C0C5C51C9DC79AAFA35088BC5BA931244175622690B013818427  halation_scatter_spv.inc
+DA8CA6ED04D424271F96D49FCE4A2F3789FA049293008E4E58BE208E96126618  grain.comp
+37A752EE30DC74B3E30EB529098808C55C546B173D077E9A7ED72C2A9EB6D569  grain_spv.inc
+C9C3264DA66C17E10BD81B5DAA5F2F5820449003E079A85DDD10EAF91B769065  glare.comp
+F015F7D02872ECA7D1A57644679D205B0DFA72D301060590532A6653197CB161  glare_spv.inc
+5F67F82CCD1AA94FCA605F82BD3E5892E82600E72801D48B3AA02ADB4536FAAD  fft_convolve.comp
+509E4355524F934CB2EC8BCB8AB5A8505B3DAAB1FAF6BA3061EFEC3D48FF89ED  fft_convolve_spv.inc
+24702406EAE67AB74AC6F39038E332DF7EA10BBBEE128E1A0E4E3466C8FFA1E3  filming_stage.comp
+17D8874339D5E1663A675F105CDBCD8733EC352EB9258C636E2F6AD8DE2C97CB  filming_stage_spv.inc

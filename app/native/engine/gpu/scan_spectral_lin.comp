@@ -1,0 +1,42 @@
+#version 450
+// LINEAR variant of scan_spectral.comp (GPU M1, #146): the same per-pixel
+// 81-band spectral scan integral, but it STOPS at unclipped linear
+// output-space RGB — no CAT02 round-trip, no CCTF, no clamp — mirroring
+// scan()'s compute_pixel `lin[]` so the CPU can run the plane ops
+// (unsharp mask / lens blur / gamut compression) and the standard encode
+// tail (Mc + CCTF + clip + tone curve) on it unchanged. The push-constant
+// matrix is the frame's plain XYZ->RGB (kXYZ_to_RGB[output_color_space]);
+// Mc stays in the CPU encode, exactly like the CPU path.
+//
+// PREVIEW-ONLY / non-bit-exact by design (GPU float != the f64 oracle path);
+// the export + parity-gated path never call this. Deviations vs compute_pixel,
+// same class as the full-chain shader the PR #145 probe measured: fp32
+// arithmetic (~2e-6) and the skipped log10/pow10 1e-10 floor (~1.6e-9).
+#define NB 81
+layout(local_size_x = 64) in;
+
+layout(std430, binding = 0) readonly  buffer InBuf  { float cmy[]; };   // npix*3
+layout(std430, binding = 1) writeonly buffer OutBuf { float rgb[]; };   // npix*3
+// Spectral tables (band-major): per-channel dye density D_c(λ) and the illuminant-
+// premultiplied CMFs (illum(λ)*xbar, *ybar, *zbar), plus the XYZ->RGB 3x3.
+layout(std430, binding = 2) readonly buffer Dye { float dye[]; };       // NB*3 (c,m,y)
+layout(std430, binding = 3) readonly buffer Cmf { float icmf[]; };      // NB*3 (X,Y,Z)
+layout(push_constant) uniform Push { uint npix; float m[12]; } pc;      // m = XYZ->RGB row-major (3x4, last col unused)
+
+void main() {
+    uint p = gl_GlobalInvocationID.x;
+    if (p >= pc.npix) return;
+    float c = cmy[p*3u+0u], mch = cmy[p*3u+1u], y = cmy[p*3u+2u];
+    float X = 0.0, Y = 0.0, Z = 0.0;
+    for (int b = 0; b < NB; ++b) {
+        float D = c*dye[b*3+0] + mch*dye[b*3+1] + y*dye[b*3+2];
+        float T = pow(10.0, -D);                 // spectral transmittance
+        X += T*icmf[b*3+0];
+        Y += T*icmf[b*3+1];
+        Z += T*icmf[b*3+2];
+    }
+    // XYZ -> output RGB (3x3 in m[0..2],[4..6],[8..10]); UNCLIPPED linear out.
+    rgb[p*3u+0u] = pc.m[0]*X + pc.m[1]*Y + pc.m[2]*Z;
+    rgb[p*3u+1u] = pc.m[4]*X + pc.m[5]*Y + pc.m[6]*Z;
+    rgb[p*3u+2u] = pc.m[8]*X + pc.m[9]*Y + pc.m[10]*Z;
+}

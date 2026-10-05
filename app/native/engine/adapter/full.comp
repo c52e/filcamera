@@ -1,0 +1,850 @@
+#version 450
+#ifdef FC_RELAXED
+#define FC_PRECISE
+#else
+#define FC_PRECISE precise
+#endif
+// Generated derivative of Spektrafilm Android gamut_compression.cpp, GPLv3.
+// Copyright (C) 2026 Spektrafilm Android contributors.
+layout(local_size_x=64,local_size_x_id=0) in;
+layout(set=0,binding=0,std430) readonly buffer Input { float input_rgb[]; };
+layout(set=0,binding=1,std430) writeonly buffer Output { float output_rgb[]; };
+layout(set=0,binding=2,std430) readonly buffer Table { float table[46080]; float L_grid[64]; float h_grid[720]; float context[10]; float dye[243]; float icmf[243]; float scan_matrix[9]; float print_controls[6]; float film_controls[4]; float film_lut[196608]; float auxiliary[]; };
+layout(push_constant) uniform Params { uint count; float threshold; float limit; float power; uint operation; uint rgba8; } params;
+layout(set=0,binding=3,std430) buffer PackedOutput { uint invalid; uint rgba[]; };
+#ifdef TRACE_CAM16
+layout(set=0,binding=4,std430) writeonly buffer Debug { float debug_values[]; };
+#endif
+const int kOklchNL=64, kOklchNH=720;
+const float kPi=3.141592653589793;
+// Range-reduced atan Taylor series: |z| <= tan(pi/8), truncation < 5e-10.
+// Avoid device-dependent atan approximation amplified by sharp Cmax gradients.
+float accurate_atan2(float y,float x) {
+    if(x==0.0 && y==0.0) return 0.0;
+    float ax=abs(x), ay=abs(y);
+    float z=min(ax,ay)/max(ax,ay);
+    bool reduce=z>0.414213562373095;
+    if(reduce) z=(z-1.0)/(z+1.0);
+    float z2=z*z;
+    float a=-1.0/19.0;
+    a=1.0/17.0+z2*a;a=-1.0/15.0+z2*a;a=1.0/13.0+z2*a;
+    a=-1.0/11.0+z2*a;a=1.0/9.0+z2*a;a=-1.0/7.0+z2*a;
+    a=1.0/5.0+z2*a;a=-1.0/3.0+z2*a;a=z*(1.0+z2*a);
+    if(reduce) a+=kPi/4.0;
+    if(ay>ax) a=kPi/2.0-a;
+    if(x<0.0) a=kPi-a;
+    return y<0.0 ? -a : a;
+}
+float copy_sign(float a,float b) { return b<0.0 ? -abs(a) : abs(a); }
+float hypotenuse(float a,float b) { return length(vec2(a,b)); }
+float log_one_plus(float x) { return abs(x)<0.001 ? x*(1.0-x*(0.5-x/3.0)) : log(1.0+x); }
+float exp_minus_one(float x) { return abs(x)<0.001 ? x*(1.0+x*(0.5+x/6.0)) : exp(x)-1.0; }
+const float kCam16LA = 64.0;   
+const float kCam16Yb = 20.0;   
+const float kCam16SurroundF = 1.0;    
+const float kCam16SurroundC = 0.69;
+const float kCam16SurroundNc = 1.0;
+const float kUcsC1 = 0.007;    
+const float kUcsC2 = 0.0228;
+const float kNpEps = 2.220446049250313e-16;  
+
+const float kCat16[3][3] = float[3][3](float[3](0.401288,0.650173,-0.051461),float[3](-0.250268,1.204414,0.045854),float[3](-0.002079,0.048952,0.953127));
+const float kCat16Inv[3][3] = float[3][3](float[3](1.8620678550872327,-1.0112546305316843,0.14918677544445175),float[3](0.3875265432361372,0.6214474419314753,-0.008973985167612516),float[3](-0.01584149884933386,-0.03412293802851557,1.0499644368778496));
+const float kRgbToXyz[3][3] = float[3][3](float[3](0.4124,0.3576,0.18049999999999997),float[3](0.2126,0.7152,0.0722),float[3](0.0193,0.1192,0.9505));
+const float kXyzToRgb[3][3] = float[3][3](float[3](3.2406,-1.5372,-0.49860000000000004),float[3](-0.9689,1.8758,0.04150000000000002),float[3](0.05569999999999999,-0.204,1.057));
+struct Cam16Context {
+    float D_RGB[3];
+    float F_L;
+    float n;
+    float z;
+    float N_bb;  
+    float A_w;
+    float Jp_white;  
+};
+
+float reinhard_knee(float d, float threshold, float limit, float power) {
+    
+    
+    
+    if (!(d > threshold)) return d;  
+    float scale = limit - threshold;
+    float x = (d - threshold) / scale;
+    float y = x / pow(1.0 + pow(x, power), 1.0 / power);
+    return threshold + scale * y;
+}
+float spow(float a, float p) {
+    if (a == 0.0) return 0.0;
+    return copy_sign(pow(abs(a), p), a);
+}
+void mat3_mul(float M[3][3], float v[3], out float dst[3]) {
+    dst[0] = M[0][0] * v[0] + M[0][1] * v[1] + M[0][2] * v[2];
+    dst[1] = M[1][0] * v[0] + M[1][1] * v[1] + M[1][2] * v[2];
+    dst[2] = M[2][0] * v[0] + M[2][1] * v[1] + M[2][2] * v[2];
+}
+float sdiv(float a, float b) { return b == 0.0 ? 0.0 : a / b; }
+float cam16_pnrc_fwd(float v, float F_L) {
+    float f = spow(F_L * abs(v) / 100.0, 0.42);
+    return (400.0 * (v < 0.0 ? -1.0 : (v > 0.0 ? 1.0 : 0.0)) * f) / (27.13 + f) + 0.1;
+}
+float cam16_pnrc_inv(float v, float F_L) {
+    float d = v - 0.1;
+    float sign = d < 0.0 ? -1.0 : (d > 0.0 ? 1.0 : 0.0);
+    float ratio = (27.13 * abs(d)) / (400.0 - abs(d));
+    return sign * 100.0 / F_L * spow(ratio, 1.0 / 0.42);
+}
+void cam16ucs_from_xyz_unit(float xyz_unit[3], int space, Cam16Context vc,
+                            out float jab[3]) {
+    float xyz[3] = float[3](xyz_unit[0] * 100.0, xyz_unit[1] * 100.0,
+                           xyz_unit[2] * 100.0);
+    float rgb[3];
+    mat3_mul(kCat16, xyz, rgb);
+    float rgb_a[3];
+    for (int k = 0; k < 3; ++k)
+        rgb_a[k] = cam16_pnrc_fwd(vc.D_RGB[k] * rgb[k], vc.F_L);
+    float a = rgb_a[0] - 12.0 * rgb_a[1] / 11.0 + rgb_a[2] / 11.0;
+    float b = (rgb_a[0] + rgb_a[1] - 2.0 * rgb_a[2]) / 9.0;
+    float h = accurate_atan2(b, a) * (180.0 / kPi);  
+    h = mod(h, 360.0);
+    if (h < 0.0) h += 360.0;
+    float e_t = 0.25 * (cos(2.0 + h * kPi / 180.0) + 3.8);
+    float A =
+        (2.0 * rgb_a[0] + rgb_a[1] + rgb_a[2] / 20.0 - 0.305) * vc.N_bb;
+    float J = 100.0 * spow(sdiv(A, vc.A_w), kCam16SurroundC * vc.z);
+    float t = (50000.0 / 13.0) * kCam16SurroundNc * vc.N_bb *
+                     sdiv(e_t * sqrt(a * a + b * b),
+                          rgb_a[0] + rgb_a[1] + 21.0 * rgb_a[2] / 20.0);
+    float C = spow(t, 0.9) * spow(J / 100.0, 0.5) *
+                     pow(1.64 - pow(0.29, vc.n), 0.73);
+    float M = C * spow(vc.F_L, 0.25);
+    
+    float Jp = ((1.0 + 100.0 * kUcsC1) * J) / (1.0 + kUcsC1 * J);
+    float Mp = log_one_plus(kUcsC2 * M) / kUcsC2;
+    float hr = h * (kPi / 180.0);
+    jab[0] = Jp;
+    jab[1] = Mp * cos(hr);
+    jab[2] = Mp * sin(hr);
+}
+void xyz_unit_from_cam16ucs(float jab[3], int space, Cam16Context vc,
+                            out float xyz_unit[3]) {
+    float Jp = jab[0];
+    float J = -Jp / (kUcsC1 * Jp - 1.0 - 100.0 * kUcsC1);
+    float Mp = hypotenuse(jab[2], jab[1]);
+    float h = accurate_atan2(jab[2], jab[1]) * (180.0 / kPi);
+    h = mod(h, 360.0);
+    if (h < 0.0) h += 360.0;
+    float M = exp_minus_one(Mp * kUcsC2) / kUcsC2;
+    float C = M / spow(vc.F_L, 0.25);
+    
+    float J_prime = max(J, kNpEps);
+    float t = spow(
+        C / (sqrt(J_prime / 100.0) * pow(1.64 - pow(0.29, vc.n), 0.73)),
+        1.0 / 0.9);
+    float e_t = 0.25 * (cos(2.0 + h * kPi / 180.0) + 3.8);
+    float A = vc.A_w * spow(J / 100.0, 1.0 / (kCam16SurroundC * vc.z));
+    float P_1 = sdiv((50000.0 / 13.0) * kCam16SurroundNc * vc.N_bb * e_t, t);
+    float P_2 = A / vc.N_bb + 0.305;
+    float P_3 = 21.0 / 20.0;
+    float hr = h * (kPi / 180.0);
+    float sin_hr = sin(hr);
+    float cos_hr = cos(hr);
+    float n_val = P_2 * (2.0 + P_3) * (460.0 / 1403.0);
+    float a = 0.0;
+    float b = 0.0;
+    if (abs(sin_hr) >= abs(cos_hr)) {
+        float P_4 = sdiv(P_1, sin_hr);
+        b = n_val / (P_4 + (2.0 + P_3) * (220.0 / 1403.0) * sdiv(cos_hr, sin_hr) -
+                     (27.0 / 1403.0) + P_3 * (6300.0 / 1403.0));
+        a = b * sdiv(cos_hr, sin_hr);
+    } else {
+        float P_5 = sdiv(P_1, cos_hr);
+        a = n_val / (P_5 + (2.0 + P_3) * (220.0 / 1403.0) -
+                     ((27.0 / 1403.0) - P_3 * (6300.0 / 1403.0)) * sdiv(sin_hr, cos_hr));
+        b = a * sdiv(sin_hr, cos_hr);
+    }
+    if (t == 0.0) { a = 0.0; b = 0.0; }
+    float rgb_a[3] = float[3](
+        (460.0 * P_2 + 451.0 * a + 288.0 * b) / 1403.0,
+        (460.0 * P_2 - 891.0 * a - 261.0 * b) / 1403.0,
+        (460.0 * P_2 - 220.0 * a - 6300.0 * b) / 1403.0);
+    float rgb[3];
+    for (int k = 0; k < 3; ++k)
+        rgb[k] = cam16_pnrc_inv(rgb_a[k], vc.F_L) / vc.D_RGB[k];
+    float xyz[3];
+    mat3_mul(kCat16Inv, rgb, xyz);
+    xyz_unit[0] = xyz[0] / 100.0;
+    xyz_unit[1] = xyz[1] / 100.0;
+    xyz_unit[2] = xyz[2] / 100.0;
+}
+float cmax_lookup(float L, float h) {
+    if (L < L_grid[0]) L = L_grid[0];
+    else if (L > L_grid[kOklchNL - 1]) L = L_grid[kOklchNL - 1];
+
+    float h_step = context[9];
+    float h_idx = (h - h_grid[0]) / h_step;
+    float h_floor = floor(h_idx);
+    int h_lo = int(h_floor);
+    h_lo = ((h_lo % kOklchNH) + kOklchNH) % kOklchNH;  
+    const int h_hi = (h_lo + 1) % kOklchNH;
+    float h_frac = h_idx - h_floor;
+
+    float L_idx = (L - L_grid[0]) / (L_grid[kOklchNL - 1] - L_grid[0]) *
+                         float(kOklchNL - 1);
+    int L_lo = int(floor(L_idx));
+    if (L_lo < 0) L_lo = 0;
+    else if (L_lo > kOklchNL - 2) L_lo = kOklchNL - 2;
+    const int L_hi = L_lo + 1;
+    float L_frac = L_idx - float(L_lo);
+
+    float v00 = table[int(L_lo) * kOklchNH + h_lo];
+    float v01 = table[int(L_lo) * kOklchNH + h_hi];
+    float v10 = table[int(L_hi) * kOklchNH + h_lo];
+    float v11 = table[int(L_hi) * kOklchNH + h_hi];
+    float t0 = v00 * (1.0 - L_frac) * (1.0 - h_frac);
+    float t1 = v01 * (1.0 - L_frac) * h_frac;
+    float t2 = v10 * L_frac * (1.0 - h_frac);
+    float t3 = v11 * L_frac * h_frac;
+    return t0 + t1 + t2 + t3;
+}
+void compress_pixel_cam16ucs(float rgb_in[3], int space, Cam16Context vc,
+                             float threshold, float limit,
+                             float power, out float dst[3]) {
+    float xyz_unit[3];
+    mat3_mul(kRgbToXyz, rgb_in, xyz_unit);
+    float jab[3];
+    cam16ucs_from_xyz_unit(xyz_unit, space, vc, jab);
+    float ap = jab[1];
+    float bp = jab[2];
+
+    float Jp =
+        reinhard_knee(jab[0] / vc.Jp_white, 0.7, 1.0, 2.2) * vc.Jp_white;
+    float Cp = hypotenuse(ap, bp);
+    float hp = accurate_atan2(bp, ap);
+
+    float Cp_max = cmax_lookup(Jp, hp);
+    float safe_Cp_max = max(Cp_max, 1e-9);
+    float d_norm = Cp / safe_Cp_max;
+    float d_comp = reinhard_knee(d_norm, threshold, limit, power);
+    float Cp_new = d_comp * safe_Cp_max;
+
+    float jab_new[3] = float[3](Jp, Cp_new * cos(hp), Cp_new * sin(hp));
+    float xyz_new[3];
+    xyz_unit_from_cam16ucs(jab_new, space, vc, xyz_new);
+    mat3_mul(kXyzToRgb, xyz_new, dst);
+#ifdef TRACE_CAM16
+    uint base=(gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x*64u)*12;
+    debug_values[base]=jab[0];debug_values[base+1]=jab[1];debug_values[base+2]=jab[2];
+    debug_values[base+3]=Jp;debug_values[base+4]=Cp;debug_values[base+5]=hp;
+    debug_values[base+6]=Cp_max;debug_values[base+7]=d_comp;debug_values[base+8]=Cp_new;
+    for(int k=0;k<3;++k) debug_values[base+9+k]=xyz_new[k];
+#endif
+
+}
+float mitchell(float t) {
+    const float B = 1.0 / 3.0;
+    const float C = 1.0 / 3.0;
+    float x = abs(t);
+    if (x < 1.0)
+        return (1.0 / 6.0) * ((12.0 - 9.0 * B - 6.0 * C) * x * x * x +
+                              (-18.0 + 12.0 * B + 6.0 * C) * x * x + (6.0 - 2.0 * B));
+    if (x < 2.0)
+        return (1.0 / 6.0) * ((-B - 6.0 * C) * x * x * x + (6.0 * B + 30.0 * C) * x * x +
+                              (-12.0 * B - 48.0 * C) * x + (8.0 * B + 24.0 * C));
+    return 0.0;
+}
+
+int safe_index(int idx, int L) {
+    if (idx < 0) return -idx;
+    if (idx >= L) return 2 * (L - 1) - idx;
+    return idx;
+}
+
+float cubic_bf(float coord, int L, out int base) {
+    if (coord <= 0.0) coord = 0.0;
+    else if (coord >= float(L - 1)) coord = float(L - 1);
+    if (coord >= float(L - 1)) { base = L - 2; return 1.0; }
+    int b = int(floor(coord));
+    base = clamp(b, 0, L - 2);
+    return coord - float(base);
+}
+
+
+void film_expose(uint p) {
+        float r   = input_rgb[p*3u] * film_controls[0];
+        float g   = input_rgb[p*3u+1u] * film_controls[0];
+        float bch = input_rgb[p*3u+2u] * film_controls[0];
+
+        float X = 0.78940291537782703 * r + 0.12282122346225685 * g + 0.044468206688454449 * bch;
+        float Y = 0.28698841093710081 * r + 0.71347859576974382 * g + -0.00046667083367552562 * bch;
+        float Z = 0.0014710100935912593 * r + 0.0038855140649431182 * g + 0.91578379979792301 * bch;
+        float bsum = X + Y + Z;
+        float denom = max(bsum, 1e-10);
+        float cx = X / denom;
+        float cy = Y / denom;
+        float qy = clamp(cy / max(1.0 - cx, 1e-10), 0.0, 1.0);
+        float qx = clamp((1.0 - cx) * (1.0 - cx), 0.0, 1.0);
+        float bmul = bsum;
+
+        int L = int(film_controls[2]);
+        float scale = float(L - 1);
+        int xb; float xf = cubic_bf(qx * scale, L, xb);
+        int yb; float yf = cubic_bf(qy * scale, L, yb);
+        float wx[4] = float[4](mitchell(xf + 1.0), mitchell(xf),
+                               mitchell(xf - 1.0), mitchell(xf - 2.0));
+        float wy[4] = float[4](mitchell(yf + 1.0), mitchell(yf),
+                               mitchell(yf - 1.0), mitchell(yf - 2.0));
+        float acc0 = 0.0, acc1 = 0.0, acc2 = 0.0, wsum = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            int xi = safe_index(xb - 1 + i, L);
+            for (int j = 0; j < 4; ++j) {
+                int yj = safe_index(yb - 1 + j, L);
+                float w = wx[i] * wy[j];
+                wsum += w;
+                int cell = (xi * L + yj) * 3;
+                acc0 += w * film_lut[cell + 0];
+                acc1 += w * film_lut[cell + 1];
+                acc2 += w * film_lut[cell + 2];
+            }
+        }
+        if (wsum != 0.0) { acc0 /= wsum; acc1 /= wsum; acc2 /= wsum; }
+
+
+        vec3 v=vec3(acc0,acc1,acc2)*bmul*film_controls[1];
+        if(film_controls[3]==0.0) v=log(max(v,vec3(0.0))+vec3(1e-10))/log(10.0);
+        for(int k=0;k<3;++k) output_rgb[p*3u+k]=v[k];
+
+}
+// Operation 3 reuses film constants for a paper axis and RGB curves.
+float paper_develop(float x,int c) {
+    int n=int(film_controls[0]);
+    if(x<=film_lut[c]) return film_lut[3*n+c];
+    if(x>=film_lut[3*(n-1)+c]) return film_lut[3*n+3*(n-1)+c];
+    int lo=0,hi=n;
+    while(lo<hi) {int mid=lo+(hi-lo)/2;if(x<film_lut[3*mid+c]) hi=mid;else lo=mid+1;}
+    int k=clamp(lo-1,0,n-2);
+    FC_PRECISE float dx=film_lut[3*(k+1)+c]-film_lut[3*k+c];
+    FC_PRECISE float t=dx!=0.0?(x-film_lut[3*k+c])/dx:0.0;
+    FC_PRECISE float y=film_lut[3*n+3*k+c]+t*(film_lut[3*n+3*(k+1)+c]-film_lut[3*n+3*k+c]);
+    return y;
+}
+float develop_interp(float x,int c,int axis,int curve,int n) {
+    if(x<=film_lut[axis+c]) return film_lut[curve+c];
+    if(x>=film_lut[axis+3*(n-1)+c]) return film_lut[curve+3*(n-1)+c];
+    int lo=0,hi=n;
+    while(lo<hi) {int mid=lo+(hi-lo)/2;if(x<film_lut[axis+3*mid+c]) hi=mid;else lo=mid+1;}
+    int k=clamp(lo-1,0,n-2);
+    FC_PRECISE float dx=film_lut[axis+3*(k+1)+c]-film_lut[axis+3*k+c];
+    FC_PRECISE float t=dx!=0.0?(x-film_lut[axis+3*k+c])/dx:0.0;
+    FC_PRECISE float y=film_lut[curve+3*k+c]+t*(film_lut[curve+3*(k+1)+c]-film_lut[curve+3*k+c]);
+    return y;
+}
+void develop_dir(uint p) {
+    int n=int(film_controls[0]);
+    vec3 raw=vec3(input_rgb[3*p],input_rgb[3*p+1],input_rgb[3*p+2]);
+    FC_PRECISE vec3 density;
+    for(int c=0;c<3;++c) density[c]=develop_interp(raw[c],c,12,12+3*n,n);
+    if(film_controls[1]!=0.0) {
+        FC_PRECISE vec3 silver=film_controls[2]!=0.0?vec3(film_lut[9],film_lut[10],film_lut[11])-density:density;
+        for(int c=0;c<3;++c) silver[c]+=film_controls[3]*silver[c]*silver[c];
+        for(int c=0;c<3;++c) {
+            FC_PRECISE float correction=0.0;
+            for(int k=0;k<3;++k) correction+=silver[k]*film_lut[3*k+c];
+            FC_PRECISE float query=raw[c]-correction;
+            density[c]=params.operation==5u ? correction : develop_interp(query,c,12+6*n,12+9*n,n);
+        }
+    }
+    for(int c=0;c<3;++c) output_rgb[3*p+c]=density[c];
+}
+layout(binding=4,std430) readonly buffer DeviceAux {float device_aux[];};
+void write_scan(uint i,vec3 linear) {
+    if(params.rgba8!=0u) {
+        if(any(isnan(linear)) || any(isinf(linear))) { atomicOr(invalid,1u); return; }
+        linear=clamp(linear,0.0,1.0);
+        vec3 encoded=mix(1.055*pow(linear,vec3(1.0/2.4))-0.055,
+                         12.92*linear,lessThanEqual(linear,vec3(0.0031308)));
+        uvec3 code=uvec3(floor(clamp(encoded,0.0,1.0)*255.0+0.5));
+        rgba[i]=code.r | (code.g<<8) | (code.b<<16) | 0xff000000u;
+    } else for(int k=0;k<3;++k) output_rgb[3*i+k]=linear[k];
+}
+int scanner_reflect(int p,int n) {
+    int period=2*n; p=((p%period)+period)%period;
+    return p<n?p:period-1-p;
+}
+void main() {
+    uint i=(gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x*gl_WorkGroupSize.x); if(i>=params.count) return;
+    // Preserve a nonfinite resident intermediate until the final host check.
+    // Spectral max()/gamut operations must not hide an invalid density.
+    if(params.operation!=2u) {
+        vec3 value=vec3(input_rgb[3*i],input_rgb[3*i+1],input_rgb[3*i+2]);
+        if(any(isnan(value)) || any(isinf(value))) {
+            if(params.rgba8!=0u && (params.operation==0u || params.operation==11u)) {atomicOr(invalid,1u);return;}
+            for(int k=0;k<3;++k) output_rgb[3*i+k]=value[k];
+            return;
+        }
+    }
+    if(params.operation==10u || params.operation==11u) {
+        int width=int(params.threshold), height=int(params.count)/width;
+        int x=int(i)%width,y=int(i)/width;
+        // Pinned fast_gaussian_filter: truncate=3, half-sample symmetric reflect.
+        int radius=int(3.0*params.limit+0.5);
+        vec3 blurred=vec3(0.0); float norm=0.0;
+        for(int k=-radius;k<=radius;++k) {
+            float weight=exp(-0.5*float(k*k)/(params.limit*params.limit));
+            int q=params.operation==10u?scanner_reflect(y+k,height)*width+x:y*width+scanner_reflect(x+k,width);
+            blurred+=weight*vec3(input_rgb[3*q],input_rgb[3*q+1],input_rgb[3*q+2]);norm+=weight;
+        }
+        blurred/=norm;
+        if(params.operation==10u) for(int c=0;c<3;++c) output_rgb[3*i+c]=blurred[c];
+        else {
+            vec3 original=vec3(device_aux[3*i],device_aux[3*i+1],device_aux[3*i+2]);
+            write_scan(i,original+params.power*(original-blurred));
+        }
+        return;
+    }
+    if(params.operation==4u || params.operation==5u) {develop_dir(i);return;}
+    if(params.operation==6u) {
+        int n=int(film_controls[0]);
+        for(int c=0;c<3;++c) output_rgb[3*i+c]=develop_interp(input_rgb[3*i+c]-(params.rgba8==2u?device_aux[3*i+c]:auxiliary[3*i+c]),c,12+6*n,12+9*n,n);
+        return;
+    }
+    if(params.operation==8u) {
+        for(int c=0;c<3;++c) output_rgb[3*i+c]=paper_develop(input_rgb[3*i+c],c);
+        return;
+    }
+    if(params.operation==9u) {
+        for(int c=0;c<3;++c) {
+            // Reference retains rounding; the qualified relaxed path permits contraction.
+            FC_PRECISE float a=(1.0-print_controls[5])*input_rgb[3*i+c];
+            FC_PRECISE float b=print_controls[5]*device_aux[3*i+c];
+            FC_PRECISE float mixed=a+b;
+            FC_PRECISE float lr=log2(max(mixed,0.0)+1e-10)*0.30102999566398119521;
+            output_rgb[3*i+c]=paper_develop(lr,c);
+        }
+        return;
+    }
+    if(params.operation==2u) {film_expose(i);return;}
+    Cam16Context vc; for(int k=0;k<3;++k) vc.D_RGB[k]=context[k];
+    vc.F_L=context[3];vc.n=context[4];vc.z=context[5];vc.N_bb=context[6];vc.A_w=context[7];vc.Jp_white=context[8];
+    
+    vec3 density=vec3(input_rgb[3*i],input_rgb[3*i+1],input_rgb[3*i+2]);
+    vec3 xyz=vec3(0.0);
+{ const int b=0;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=1;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=2;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=3;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=4;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=5;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=6;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=7;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=8;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=9;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=10;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=11;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=12;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=13;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=14;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=15;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=16;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=17;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=18;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=19;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=20;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=21;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=22;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=23;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=24;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=25;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=26;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=27;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=28;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=29;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=30;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=31;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=32;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=33;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=34;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=35;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=36;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=37;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=38;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=39;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=40;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=41;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=42;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=43;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=44;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=45;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=46;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=47;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=48;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=49;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=50;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=51;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=52;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=53;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=54;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=55;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=56;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=57;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=58;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=59;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=60;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=61;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=62;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=63;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=64;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=65;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=66;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=67;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=68;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=69;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=70;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=71;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=72;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=73;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=74;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=75;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=76;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=77;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=78;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=79;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+{ const int b=80;
+        float d=density.x*dye[3*b]+density.y*dye[3*b+1]+density.z*dye[3*b+2];
+        float t=pow(10.0,-d);
+        xyz+=t*vec3(icmf[3*b],icmf[3*b+1],icmf[3*b+2]);
+    }
+    if(params.operation==1u || params.operation==3u || params.operation==7u) {
+        // Direct printing.py tail: midgray normalization, preflash, two floors,
+        // print exposure and BW factor. No extra creative response curve.
+        vec3 raw=xyz*print_controls[0]+vec3(print_controls[2],print_controls[3],print_controls[4]);
+        raw=(max(raw,vec3(0.0))+vec3(1e-10))*print_controls[1];
+        vec3 log_raw=log(max(raw,vec3(0.0))+vec3(1e-10))/log(10.0);
+        for(int k=0;k<3;++k) output_rgb[3*i+k]=params.operation==7u?raw[k]:(params.operation==3u?paper_develop(log_raw[k],k):log_raw[k]);
+        return;
+    }
+    xyz=max(xyz,vec3(0.0))+vec3(1e-10);
+    float rgb[3];
+    for(int k=0;k<3;++k) rgb[k]=scan_matrix[3*k]*xyz.x+scan_matrix[3*k+1]*xyz.y+scan_matrix[3*k+2]*xyz.z;
+
+    float result[3];compress_pixel_cam16ucs(rgb,0,vc,params.threshold,params.limit,params.power,result);
+    write_scan(i,vec3(result[0],result[1],result[2]));
+}

@@ -1,0 +1,33 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Source {float src[];};
+layout(binding=1,std430) buffer Horizontal {float horizontal[];};
+layout(binding=2,std430) readonly buffer Parameters {float params[];};
+layout(binding=3,std430) buffer Result {float rows[];};
+layout(push_constant) uniform Push {uint w,h,ow,oh;int rx,ry;uint op;} p;
+int mirrorIndex(int i,int n) {if(n==1) return 0;int m=i%(2*(n-1));if(m<0) m+=2*(n-1);return m<n?m:2*(n-1)-m;}
+void add(inout float sum,inout float correction,float value) {precise float a=value-correction;precise float b=sum+a;correction=(b-sum)-a;sum=b;}
+void main() {
+    uint i=gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x*64u;
+    uint kx=0,ky=uint(2*p.rx+1),mx=ky+uint(2*p.ry+1),my=mx+p.ow,weights=my+p.oh;
+    if(p.op==0) {
+        if(i>=p.ow*p.h*3) return;
+        uint c=i%3,x=(i/3)%p.ow,y=i/(p.ow*3);int sx=int(params[mx+x]);
+        precise float sum=0,correction=0;
+        for(int k=-p.rx;k<=p.rx;++k) {uint index=(y*p.w+uint(mirrorIndex(sx+k,int(p.w))))*3+c;add(sum,correction,src[index]*params[kx+uint(k+p.rx)]);}
+        horizontal[i]=sum;
+    } else {
+        if(i>=p.oh) return;
+        int sy=int(params[my+i]);precise float total=0,tc=0;
+        for(uint x=0;x<p.ow;++x) {
+            precise vec3 value=vec3(0),correction=vec3(0);
+            for(int k=-p.ry;k<=p.ry;++k) {
+                uint index=(uint(mirrorIndex(sy+k,int(p.h)))*p.ow+x)*3;
+                for(uint c=0;c<3;++c) add(value[c],correction[c],horizontal[index+c]*params[ky+uint(k+p.ry)]);
+            }
+            precise float luminance=0.288*value.r+0.7119*value.g+0.0001*value.b;
+            add(total,tc,luminance*params[weights+i*p.ow+x]);
+        }
+        rows[i]=total;
+    }
+}
