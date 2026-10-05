@@ -1,0 +1,19 @@
+FILCamera model data assembly
+
+Original profiles/LUTs: spektrafilm by Andrea Volpato
+https://github.com/andreavolpato/spektrafilm
+License: CC BY-SA 4.0, see ../native/engine/licenses/SPEKTRAFILM_LICENSE.txt
+
+Base runtime assets were selected from Spektrafilm Android commit
+15fb120996f03fc1e58a9a9d819e335f65d7a092. Selectable negative-film/paper profiles,
+neutral print filters, and Portra 800 Push 1/2 use original spektrafilm commit
+3bb2c2d2801ff68b92019cf1dbcbb133d60832bc. Their data values were not edited.
+The inventory records the SHA-256 of every distributed asset.
+
+2026-10-04: FILCamera contributors reorganized the product source/build and added
+English/Chinese resources. No profile, spectrum, ICC or spectral LUT bytes changed.
+Device-generated preview LUTs are derived data, generated for the selected recipe;
+their manifests record recipe and engine identity. They are not distributed as
+original upstream profiles. The runtime does not bundle PC-baked preview LUTs.
+
+ICC materials retain their own authorship/licenses under assets/icc/.

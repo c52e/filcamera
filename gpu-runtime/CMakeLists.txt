@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(filmcamera_gpu LANGUAGES CXX)
+add_library(filmcamera_gpu SHARED runtime.cpp meter.cpp plane.cpp diffusion_resample.cpp)
+target_compile_features(filmcamera_gpu PRIVATE cxx_std_17)
+target_compile_options(filmcamera_gpu PRIVATE -O2 -Wall -Wextra)
+target_include_directories(filmcamera_gpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${RAW_SHADER_DIR})
+target_link_libraries(filmcamera_gpu PRIVATE vulkan)
+target_link_options(filmcamera_gpu PRIVATE -Wl,-z,max-page-size=16384)

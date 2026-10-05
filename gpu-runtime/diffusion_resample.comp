@@ -1,0 +1,37 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Source {float src[];};
+layout(binding=1,std430) buffer Target {float dst[];};
+layout(binding=2,std430) readonly buffer Original {float raw[];};
+layout(binding=3,std430) readonly buffer Kernel {float core[];};
+layout(push_constant) uniform Push {uint w,h,factor,offset,ch,gather;} p;
+int reflectIndex(int x,int n) {int period=2*(n-1);int m=x%period;if(m<0)m+=period;return m<n?m:period-m;}
+float finiteValue(float v) {return isnan(v)||isinf(v)?0.0:v;}
+float low(ivec2 q) {
+    q=ivec2(reflectIndex(q.x,int(p.w/p.factor)),reflectIndex(q.y,int(p.h/p.factor)));
+    return src[p.offset+uint(q.y)*(p.w/p.factor)+uint(q.x)];
+}
+void main() {
+    uint i=gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x*64u;
+    uint lw=p.w/p.factor,lh=p.h/p.factor;
+    if(p.gather!=0u) {
+        if(i>=lw*lh)return;
+        uint x=(i%lw)*p.factor,y=(i/lw)*p.factor;float v=0.0;
+        for(uint dy=0u;dy<p.factor;++dy)for(uint dx=0u;dx<p.factor;++dx)
+            v+=finiteValue(src[((y+dy)*p.w+x+dx)*3u+p.ch]);
+        dst[p.offset+i]=v/float(p.factor*p.factor);return;
+    }
+    if(i>=p.w*p.h)return;
+    ivec2 xy=ivec2(i%p.w,i/p.w);
+    vec2 q=(vec2(xy)+0.5)/float(p.factor)-0.5;ivec2 base=ivec2(floor(q));vec2 t=fract(q);
+    float v=mix(mix(low(base),low(base+ivec2(1,0)),t.x),
+                mix(low(base+ivec2(0,1)),low(base+ivec2(1,1)),t.x),t.y);
+    // Compact residual preserves the original narrow center at full resolution.
+    for(int dy=-4;dy<=4;++dy)for(int dx=-4;dx<=4;++dx) {
+        float k=core[(dy+4)*9+dx+4];
+        if(k==0.0)continue;
+        ivec2 s=ivec2(reflectIndex(xy.x+dx,int(p.w)),reflectIndex(xy.y+dy,int(p.h)));
+        v+=k*finiteValue(raw[(uint(s.y)*p.w+uint(s.x))*3u+p.ch]);
+    }
+    dst[i*3u+p.ch]=v;
+}

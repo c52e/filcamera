@@ -1,0 +1,19 @@
+<resources>
+    <style name="FilmTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#286455</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">#F6F4EF</item>
+        <item name="android:navigationBarColor">#F6F4EF</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="CameraTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">#101113</item>
+        <item name="android:navigationBarColor">#101113</item>
+        <item name="android:windowBackground">#101113</item>
+    </style>
+</resources>
