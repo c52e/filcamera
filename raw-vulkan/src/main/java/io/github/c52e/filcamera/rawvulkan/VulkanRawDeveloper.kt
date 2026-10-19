@@ -32,9 +32,9 @@ class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
     private fun run(frame: RawFrame,rotation: Int?,crop: Crop?=null,resident: Boolean=false): FilmInput {
         val start=SystemClock.elapsedRealtimeNanos()
         frame.validate()
-        require(maxPixels in 1..16_000_000)
+        require(maxPixels in 1..RawLimits.MAX_PIXELS)
         val cw=frame.right-frame.left;val ch=frame.bottom-frame.top
-        require(cw.toLong()*ch<=16_000_000) { "RAW Vulkan supports at most 16 MP active pixels" }
+        require(RawLimits.supports(cw,ch)) { "RAW Vulkan supports at most 60 MP active pixels" }
         val region=crop ?: Crop(0,0,cw,ch)
         require(region.left>=0 && region.top>=0 && region.width>0 && region.height>0 && region.left.toLong()+region.width<=cw && region.top.toLong()+region.height<=ch)
         val scale=min(1.0,sqrt(maxPixels.toDouble()/(region.width.toLong()*region.height)))

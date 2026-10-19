@@ -140,7 +140,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vul
         auto length=env->GetArrayLength(parameters);require(length>=40,"RAW parameters truncated");
         std::vector<uint32_t> p(length);env->GetIntArrayRegion(parameters,0,length,reinterpret_cast<jint*>(p.data()));
         if(env->ExceptionCheck()) return nullptr;
-        require(p[0]>=2 && p[1]>=2 && uint64_t(p[0])*p[1]<=16'000'000 && p[2]>0 && p[3]>0 && uint64_t(p[2])*p[3]<=16'000'000,"Invalid RAW dimensions");
+        require(p[0]>=2 && p[1]>=2 && uint64_t(p[0])*p[1]<=FC_MAX_PIXELS && p[2]>0 && p[3]>0 && uint64_t(p[2])*p[3]<=FC_MAX_PIXELS,"Invalid RAW dimensions");
         auto data=env->GetDirectBufferAddress(input);auto bytes=env->GetDirectBufferCapacity(input);
         require(data && bytes>0 && bytes<=256*1024*1024 && bytes%4==0,"Invalid RAW upload");
         auto destination=output?env->GetDirectBufferAddress(output):nullptr;
@@ -198,7 +198,7 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vulkan
 }
 
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_c52e_filcamera_rawvulkan_NativeBuffer_allocateNative(JNIEnv* env,jclass,jint bytes) {
-    if(bytes<=0 || bytes>16*1000*1000*12) {env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),"Invalid native buffer size");return 0;}
+    if(bytes<=0 || bytes>(FC_MAX_PIXELS*12)) {env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),"Invalid native buffer size");return 0;}
     void* pointer=std::malloc(size_t(bytes));
     if(!pointer) {env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),"Native image allocation failed");return 0;}
     return reinterpret_cast<jlong>(pointer);

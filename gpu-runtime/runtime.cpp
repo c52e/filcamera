@@ -98,7 +98,7 @@ extern "C" const char* fc_gpu_error() noexcept {return error.c_str();}
 extern "C" uint64_t fc_gpu_adopt(FcGpuContext* g,const FcGpuImage* image) noexcept {
     try {
         if(!owner || g!=&owner->gpu || !image || !image->buffer || !image->memory || !image->width || !image->height || image->color!=1 ||
-           uint64_t(image->width)*image->height>16000000 || image->bytes!=uint64_t(image->width)*image->height*12)
+           uint64_t(image->width)*image->height>FC_MAX_PIXELS || image->bytes!=uint64_t(image->width)*image->height*12)
             throw std::runtime_error("Invalid GPU image adoption");
         const auto id=next.fetch_add(1);if(!id) throw std::runtime_error("GPU image identifier exhausted");
         owner->images.emplace(id,*image);++owner->refs;return id;

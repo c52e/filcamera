@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera.rawvulkan
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.lang.ref.PhantomReference
@@ -17,7 +19,7 @@ class NativeBuffer private constructor(val pixels: ByteBuffer,private val lease:
         }
         private fun release(ref: PhantomReference<ByteBuffer>) {val pointer=synchronized(allocations) {allocations.remove(ref)};if(pointer!=null) free(pointer);ref.clear()}
         fun allocate(bytes: Int): NativeBuffer {
-            require(bytes>0 && bytes<=16_000_000*12)
+            require(bytes>0 && bytes<=RawLimits.MAX_PIXELS*12)
             val pointer=allocateNative(bytes)
             try {
                 val pixels=view(pointer,bytes).asReadOnlyBuffer().order(ByteOrder.nativeOrder())

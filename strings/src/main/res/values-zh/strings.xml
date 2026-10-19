@@ -12,7 +12,7 @@
     <string name="an_undemosaiced_bayer_dng_image_is_required">"需要一个未去马赛克的 Bayer DNG 图像"</string>
     <string name="only_this_app_s_16_bit_bayer_dngs_are_supported_uncompressed_or_l">"仅支持本 App 的 16-bit Bayer DNG（未压缩或无损 JPEG）"</string>
     <string name="chunky_planar_dng_layout_is_not_supported">"不支持分块或平面 DNG"</string>
-    <string name="dng_exceeds_the_16_megapixel_limit">"DNG 超过当前 1600 万像素上限"</string>
+    <string name="dng_exceeds_the_60_megapixel_limit">"DNG 超过当前 6000 万像素上限"</string>
     <string name="a_dng_saved_by_this_app_is_required_embedded_development_record_m">"需要本版 FILCamera 保存的 DNG（缺少内嵌显影记录）"</string>
     <string name="unsupported_dng_developer_version">"不支持此 DNG 的显影算法版本"</string>
     <string name="dng_orientation_does_not_match_its_development_record">"DNG 方向与显影记录不一致"</string>
@@ -81,7 +81,7 @@
     <string name="not_rear_facing">"非后置"</string>
     <string name="no_raw_capability">"无 RAW 能力"</string>
     <string name="not_bayer">"非 Bayer"</string>
-    <string name="effective_raw_exceeds_16_megapixels">"有效 RAW 超过 1600 万像素"</string>
+    <string name="effective_raw_exceeds_60_megapixels">"有效 RAW 超过 6000 万像素"</string>
     <string name="missing_raw_calibration">"缺少 RAW 校准"</string>
     <string name="unsupported_raw_coordinates">"RAW 坐标不受支持"</string>
     <string name="unavailable">"不可用"</string>

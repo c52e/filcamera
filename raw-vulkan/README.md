@@ -10,7 +10,7 @@ The resize path has five FP32 passes: CFA calibration, directional green, bounde
 
 A call borrows the worker's shared Vulkan runtime and owns its pipeline, seven buffer bindings, command pool and fence. Native-resolution processing binds small placeholders for the two unused image intermediates. Only the completed output allocation transfers to the checked image registry; other RAW allocations are released before film processing. No CPU image fallback or mutation of camera/RAW input is permitted. Failed captures retain the independently saved DNG.
 
-Limits: Vulkan 1.1, seven compute storage buffers, 256-thread workgroups, host-visible coherent memory, up to 16 MP active input and output, plus device buffer/allocation limits. Editing may request a smaller output; final resolution is never silently reduced. This is a full-frame pipeline, not a tiled RAW algorithm.
+Limits: Vulkan 1.1, seven compute storage buffers, 256-thread workgroups, host-visible coherent memory, up to 60 MP active input and output, plus device buffer/allocation limits. Editing may request a smaller output; final resolution is never silently reduced. This is a full-frame pipeline, not a tiled RAW algorithm.
 
 Diagnostics report actual dispatch/submission/wait counts, CPU wait time and command-buffer GPU timestamps when the compute queue supports them. `batchSubmitWaitMs` includes recording/submission/wait overhead and is not a hardware GPU measurement. Timestamps include the entire command buffer, including barriers. See `docs/TESTING.md` for qualification boundaries.
 

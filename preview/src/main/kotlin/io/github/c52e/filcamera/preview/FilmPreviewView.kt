@@ -204,7 +204,10 @@ class FilmPreviewView(context: Context,
             } catch (e: Exception) { reportFailure(e) }
         }
     }
-    private fun reportFailure(e: Exception) { failed=true; failure(tr(Texts.string.gpu_preview_failed_value, e.message)) }
+    private fun reportFailure(e: Exception) {
+        android.util.Log.e("FilmPreviewView","GPU preview failed",e)
+        failed=true; failure(tr(Texts.string.gpu_preview_failed_value, e.message))
+    }
     private fun compile(type: Int, source: String): Int {
         val shader=glCreateShader(type); glShaderSource(shader,source); glCompileShader(shader)
         val ok=IntArray(1); glGetShaderiv(shader,GL_COMPILE_STATUS,ok,0)
@@ -245,7 +248,7 @@ uniform vec3 uParams;
 uniform bool uBypass;
 in vec2 vUv;
 out vec4 color;
-vec3 decode(vec3 x) { return mix(x/12.92,pow((x+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),x)); }
+vec3 decode(vec3 x) { x=max(x,vec3(0.0));return mix(x/12.92,pow((x+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),x)); }
 vec3 encode(vec3 x) { return mix(12.92*x,1.055*pow(x,vec3(1.0/2.4))-0.055,step(vec3(0.0031308),x)); }
 void main() {
     vec3 camera=texture(uCamera,vUv).rgb;

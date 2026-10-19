@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
@@ -11,7 +13,7 @@ import kotlin.math.floor
 /** Coordinates are relative to the calibrated RAW active rectangle, before orientation. */
 data class CaptureFraming(val width: Int,val height: Int,val left: Int,val top: Int,val cropWidth: Int,val cropHeight: Int,
     val targetMm: Double?,val optics: CameraOptics?,val lens: io.github.c52e.filcamera.camera.LensRoute?=null) {
-    init { require(width>0 && height>0 && width.toLong()*height<=16_000_000 && left>=0 && top>=0 && cropWidth>0 && cropHeight>0 && left.toLong()+cropWidth<=width && top.toLong()+cropHeight<=height) }
+    init { require(RawLimits.supports(width,height) && left>=0 && top>=0 && cropWidth>0 && cropHeight>0 && left.toLong()+cropWidth<=width && top.toLong()+cropHeight<=height) }
     val scale get()=cropWidth.toFloat()/width
     val crop get()=VulkanRawDeveloper.Crop(left,top,cropWidth,cropHeight)
     fun json(): JSONObject=JSONObject().put("version",1).put("width",width).put("height",height).put("left",left).put("top",top)

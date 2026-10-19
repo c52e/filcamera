@@ -17,7 +17,7 @@ void lab_grain(const Profile& film,const FilmingParams& params,const std::vector
     std::vector<float> layers(resident?0:size_t(npix)*9);
     gpu::FilmingStageDiagnostics d{};
     if(!gpu::grain_layers(density,npix,w,h,ndc.data(),film.density_curves_layers.data(),n,film.is_positive(),layers.data(),&d))
-        throw std::runtime_error("GPU grain layers failed");
+        throw std::runtime_error(std::string("GPU grain layers failed: ")+(d.reason?d.reason:"unknown"));
     double maximum[9]{};
     for(int cell=0;cell<9;++cell) {
         maximum[cell]=-1;

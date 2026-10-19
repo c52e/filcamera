@@ -1092,8 +1092,8 @@ void compress_rgb_cam16ucs_chroma(double* rgb, int npix, int output_space,
 }
 
 void audit_spectral_dispatch(const float* input,float* output,int npix,int output_space,double threshold,double limit,double power,const float* scanTables,uint32_t operation,const std::vector<float>& extra={}) {
-    if(output_space!=0 || npix<1 || npix>16000000)
-        throw std::runtime_error("GPU CAM16 scope: sRGB, <=16 MP");
+    if(output_space!=0 || npix<1 || npix>FC_MAX_PIXELS)
+        throw std::runtime_error("GPU CAM16 scope: sRGB, <=60 MP");
     if(std::getenv("FILMCAMERA_GPU_CAM16_FAIL"))
         throw std::runtime_error("injected GPU CAM16 failure");
     auto& session=audit::Session::current();

@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import android.graphics.Bitmap
 import java.io.File
 import java.nio.ByteBuffer
@@ -9,7 +11,7 @@ import kotlin.math.roundToInt
 
 object FilmOutput {
     fun buffer(w: Int,h: Int): ByteBuffer {
-        require(w in 1..16384 && h in 1..16384 && w.toLong()*h<=16_000_000)
+        require(RawLimits.supports(w,h))
         return ByteBuffer.allocateDirect(w*h*4).order(ByteOrder.nativeOrder())
     }
     fun bitmap(rgba: ByteBuffer,w: Int,h: Int): Bitmap {
@@ -21,7 +23,7 @@ object FilmOutput {
     // Independent CPU reference for instrumentation; production uses packed GPU bytes.
 
     fun bitmap(file: File, w: Int, h: Int): Bitmap {
-        require(w in 1..16384 && h in 1..16384 && w.toLong()*h <= 16_000_000 && file.length() == w.toLong()*h*12)
+        require(RawLimits.supports(w,h) && file.length() == w.toLong()*h*12)
         val pixels = IntArray(w*h)
         val row = ByteArray(w*12); val buffer = ByteBuffer.wrap(row).order(ByteOrder.LITTLE_ENDIAN)
         fun encode(v: Float): Int {

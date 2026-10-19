@@ -50,7 +50,9 @@ class PreviewMeter(private val external: Boolean=true) {
             scalar.rewind();glReadPixels(0,0,1,1,GL_RGBA,GL_FLOAT,scalar)
             check(glGetError()==GL_NO_ERROR) { "Preview metering failed" }
             val mean=scalar.get(0)/scalar.get(1)
-            require(mean.isFinite() && mean>=0)
+            require(mean.isFinite() && mean>=0) {
+                "Invalid preview meter: sum=${scalar.get(0)}, weight=${scalar.get(1)}, mean=$mean, size=${width}x$height"
+            }
             return if(mean<=1e-8f) 0f else (ln(.184f/mean)/ln(2f))
         } finally {
             glBindFramebuffer(GL_FRAMEBUFFER,previous[0]);glViewport(viewport[0],viewport[1],viewport[2],viewport[3])
@@ -93,7 +95,9 @@ void main(){
         vec2 p=(vec2(i)+.5)/vec2(uSize)*2.-1.;p.y=-p.y;
         vec2 q=vec2(uRotation.x*p.x-uRotation.y*p.y,uRotation.y*p.x+uRotation.x*p.y);
         vec2 uv=(uMatrix*vec4(q*.5+.5,0,1)).xy;
-        vec3 c=texture(uCamera,uv).rgb;
+        // External YUV conversion can produce negative RGB. Both mix operands
+        // are evaluated, so an unused negative-base pow can still poison the sum.
+        vec3 c=max(texture(uCamera,uv).rgb,vec3(0.0));
         vec3 linear=mix(c/12.92,pow((c+.055)/1.055,vec3(2.4)),step(vec3(.04045),c));
         // Y after standard CAT16 sRGB -> ProPhoto conversion (same space as the oracle).
         float luminance=dot(linear,vec3(.21348993,.71272146,.07381137));

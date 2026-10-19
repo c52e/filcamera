@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
@@ -79,17 +81,17 @@ class PairCaptureStore(private val context: Context) {
                 }
                 require(selected.lens==null || selected.lens==frame.lens) {tr(Texts.string.raw_lens_does_not_match_shutter_record_dng_retained)}
                 report.put("framing",selected.json())
-                val developer=VulkanRawDeveloper(16_000_000)
+                val developer=VulkanRawDeveloper(RawLimits.MAX_PIXELS)
                 val linear=timing.stage("rawDevelop") { developer.developGpuProPhoto(raw,frame.rotation,selected.crop) }.also {ownedInput=it}
                 report.put("rawDevelop",JSONObject(developer.diagnostics))
                 if(verifyDngRoundTrip) {
                     val loaded=timing.stage("testDngRead") {DngRawFile.read(dngFile)}
-                    val reread=timing.stage("testDngDevelop") {VulkanRawDeveloper(16_000_000).developProPhoto(loaded.frame,loaded.rotation,selected.crop)}
+                    val reread=timing.stage("testDngDevelop") {VulkanRawDeveloper(RawLimits.MAX_PIXELS).developProPhoto(loaded.frame,loaded.rotation,selected.crop)}
                     require(loaded.rotation==frame.rotation && loaded.record.getLong("grainSeed")==grainSeed)
                     require(loaded.record.getJSONObject("recipe").toString()==recipe.json().toString())
                     require(reread.width==linear.width && reread.height==linear.height)
                     var maximum=0.0;var squares=0.0
-                    val reference=VulkanRawDeveloper(16_000_000).developProPhoto(raw,frame.rotation,selected.crop)
+                    val reference=VulkanRawDeveloper(RawLimits.MAX_PIXELS).developProPhoto(raw,frame.rotation,selected.crop)
                     val original=reference.pixels.asFloatBuffer();val restored=reread.pixels.asFloatBuffer()
                     for(i in 0 until original.capacity()) {val d=kotlin.math.abs(original.get(i).toDouble()-restored.get(i));maximum=maxOf(maximum,d);squares+=d*d}
                     val rms=kotlin.math.sqrt(squares/original.capacity())

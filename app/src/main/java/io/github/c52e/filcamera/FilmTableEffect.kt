@@ -116,7 +116,9 @@ out vec4 color;
 void main() {
     vec3 camera=texture(uCamera,vUv).rgb;
     if(uBypass || !uHasLut) { color=vec4(camera,1.0);return; }
-    vec3 linear=mix(camera/12.92,pow((camera+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),camera));
+    // YUV-to-RGB undershoot must not reach the fractional-power branch.
+    vec3 signal=max(camera,vec3(0.0));
+    vec3 linear=mix(signal/12.92,pow((signal+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),signal));
     // Metered input gain precedes the fixed film model; ISP still cannot be inverted.
     linear*=uInputGain;
     vec3 shaped=log(vec3(1.0)+32.0*clamp(linear,0.0,4.0))/log(129.0);

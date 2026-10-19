@@ -168,7 +168,9 @@ struct Session::Impl {
             return;
         }
         if(output) fc_gpu_count((operation==0 || operation==11)?FC_OUTPUT_READBACK:FC_INTERMEDIATE_READBACK,count*4);
-        if(output) for(size_t i=0;i<count;++i) if(!std::isfinite(values[i])) throw std::runtime_error("nonfinite output");
+        if(output) for(size_t i=0;i<count;++i) if(!std::isfinite(values[i]))
+            throw std::runtime_error("nonfinite output: operation="+std::to_string(operation)+
+                ", index="+std::to_string(i)+", value="+std::to_string(values[i]));
         if(output) for(size_t i=0;i<count;++i) output[i]=values[i];
     }
 };
@@ -183,7 +185,7 @@ void Session::run(const float* input,float* output,size_t count,const uint32_t* 
             if(spatialStarted) input=nullptr;
             if((operation!=0)) output=nullptr;
         }
-        if(operation>9 || !count || count%3 || count>48000000 || !std::isfinite(threshold) || !std::isfinite(limit) || !std::isfinite(power) || limit<=threshold || power<=0)
+        if(operation>9 || !count || count%3 || count>(FC_MAX_PIXELS*3) || !std::isfinite(threshold) || !std::isfinite(limit) || !std::isfinite(power) || limit<=threshold || power<=0)
             throw std::runtime_error("invalid resident dispatch");
         if(chainPhase) {
             if(count!=chainCount || !((chainPhase==1 && operation==3 && input && !output) ||
@@ -218,7 +220,7 @@ void Session::run(const float* input,float* output,size_t count,const uint32_t* 
     }catch(...){close();throw;}
 }
 void Session::beginPaperScan(size_t count) {
-    if(chainPhase || !count || count%3 || count>48000000) {close();throw std::runtime_error("invalid paper scan lease");}
+    if(chainPhase || !count || count%3 || count>(FC_MAX_PIXELS*3)) {close();throw std::runtime_error("invalid paper scan lease");}
     chainPhase=1;chainCount=count;
 }
 void Session::endPaperScan() {
@@ -226,7 +228,7 @@ void Session::endPaperScan() {
     chainPhase=0;chainCount=0;
 }
 void Session::beginFilmScan(size_t count) {
-    if(chainPhase || !count || count%3 || count>48000000) {close();throw std::runtime_error("invalid film scan lease");}
+    if(chainPhase || !count || count%3 || count>(FC_MAX_PIXELS*3)) {close();throw std::runtime_error("invalid film scan lease");}
     chainPhase=11;chainCount=count;
 }
 void Session::endFilmScan() {

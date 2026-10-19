@@ -20,7 +20,7 @@ object DngRawFile {
     init {System.loadLibrary("rawvulkan")}
     private external fun decodeJpeg(bytes: ByteArray,width: Int,height: Int): ByteArray
     const val FORMAT="filmcamera-raw-v1"
-    const val MAX_FILE_BYTES=128L*1024*1024
+    const val MAX_FILE_BYTES=256L*1024*1024
     private const val MAX_DESCRIPTION=4*1024*1024
     data class Decoded(val frame: RawFrame,val rotation: Int,val record: JSONObject)
 
@@ -92,7 +92,7 @@ object DngRawFile {
         }
         require(scalar(raw,284,1)==1L) {tr(Texts.string.chunky_planar_dng_layout_is_not_supported)}
         val w=scalar(raw,256);val h=scalar(raw,257)
-        require(w in 2..16384 && h in 2..16384 && w*h<=16_000_000) {tr(Texts.string.dng_exceeds_the_16_megapixel_limit)}
+        require(w in 2..16384 && h in 2..16384 && w*h<=RawLimits.MAX_PIXELS) {tr(Texts.string.dng_exceeds_the_60_megapixel_limit)}
         val description=directories.mapNotNull {it[270]}.map {t->
             require(t.type==2 && t.count in 1..MAX_DESCRIPTION)
             bytes(t.offset,t.count).toString(Charsets.UTF_8).trimEnd('\u0000')

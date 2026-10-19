@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import android.content.Context
 import io.github.c52e.filcamera.rawvulkan.DngRawFile
 import io.github.c52e.filcamera.rawvulkan.VulkanRawDeveloper
@@ -20,7 +22,7 @@ class DngEditInput(@Suppress("UNUSED_PARAMETER") context: Context) {
         close()
         val raw=timing.stage("dngRead") {DngRawFile.read(source,cancelled)};checkActive()
         val framing=CaptureFraming.read(raw.record.optJSONObject("framing"),raw.frame.right-raw.frame.left,raw.frame.bottom-raw.frame.top)
-        val converted=timing.stage("rawDevelop") {VulkanRawDeveloper(if(fullResolution) 16_000_000 else 3_000_000).developGpuProPhoto(raw.frame,raw.rotation,framing.crop)}
+        val converted=timing.stage("rawDevelop") {VulkanRawDeveloper(if(fullResolution) RawLimits.MAX_PIXELS else 3_000_000).developGpuProPhoto(raw.frame,raw.rotation,framing.crop)}
         try {checkActive()} catch(e: Exception) {converted.close();throw e}
         val result=Prepared(converted.cpuPixels,converted.width,converted.height,raw.record,framing,converted)
         ready=result;key=cacheKey;return result

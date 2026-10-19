@@ -40,7 +40,7 @@ your originals before replacing such an installation. [Build details](docs/BUILD
 
 ## Device support and limitations
 
-Android 10+ with Vulkan 1.1 and a supported Camera2 Bayer RAW mode, at most 16 million
+Android 10+ with Vulkan 1.1 and a supported Camera2 Bayer RAW mode, at most 60 million
 effective pixels. The earlier development builds were exercised on Xiaomi 15 Pro;
 other devices need validation. HAL-exposed RAW lenses, physical-stream combinations
 and manual controls vary by device. Unsupported cameras remain unavailable for RAW

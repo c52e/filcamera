@@ -2,6 +2,9 @@
 #include <vulkan/vulkan.h>
 #include <stdint.h>
 
+// Product ceiling; Vulkan device limits remain mandatory.
+constexpr uint64_t FC_MAX_PIXELS = 60000000ULL;
+
 // C ABI: shared by libraries that each statically link libc++. No STL ownership
 // or exceptions cross this boundary. All operations belong to the calling worker.
 struct FcGpuContext {

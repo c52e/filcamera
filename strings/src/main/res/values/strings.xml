@@ -13,7 +13,7 @@
     <string name="an_undemosaiced_bayer_dng_image_is_required">"An undemosaiced Bayer DNG image is required"</string>
     <string name="only_this_app_s_16_bit_bayer_dngs_are_supported_uncompressed_or_l">"Only this app\'s 16-bit Bayer DNGs are supported (uncompressed or lossless JPEG)"</string>
     <string name="chunky_planar_dng_layout_is_not_supported">"Chunky/planar DNG layout is not supported"</string>
-    <string name="dng_exceeds_the_16_megapixel_limit">"DNG exceeds the 16 megapixel limit"</string>
+    <string name="dng_exceeds_the_60_megapixel_limit">"DNG exceeds the 60 megapixel limit"</string>
     <string name="a_dng_saved_by_this_app_is_required_embedded_development_record_m">"A DNG saved by this app is required (embedded development record missing)"</string>
     <string name="unsupported_dng_developer_version">"Unsupported DNG developer version"</string>
     <string name="dng_orientation_does_not_match_its_development_record">"DNG orientation does not match its development record"</string>
@@ -82,7 +82,7 @@
     <string name="not_rear_facing">"Not rear-facing"</string>
     <string name="no_raw_capability">"No RAW capability"</string>
     <string name="not_bayer">"Not Bayer"</string>
-    <string name="effective_raw_exceeds_16_megapixels">"Effective RAW exceeds 16 megapixels"</string>
+    <string name="effective_raw_exceeds_60_megapixels">"Effective RAW exceeds 60 megapixels"</string>
     <string name="missing_raw_calibration">"Missing RAW calibration"</string>
     <string name="unsupported_raw_coordinates">"Unsupported RAW coordinates"</string>
     <string name="unavailable">"Unavailable"</string>

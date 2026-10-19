@@ -202,7 +202,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
     try {
         fc_gpu_reset_counts();
         Utf a(env,assets),s(env,source),t(env,target),f(env,filmProfile),paper(env,paperProfile);
-        if(width<1 || height<1 || width>16384 || height>16384 || size_t(width)*height>16000000 || !std::isfinite(ev) || std::abs(ev)>2 || id<=0)
+        if(width<1 || height<1 || width>16384 || height>16384 || size_t(width)*height>FC_MAX_PIXELS || !std::isfinite(ev) || std::abs(ev)>2 || id<=0)
             throw std::runtime_error("Unsupported dimensions or exposure");
         if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");
         size_t count=size_t(width)*height*3;

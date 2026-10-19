@@ -43,7 +43,7 @@ struct DensityStorage::Impl {
         if(memory) fc_vkFreeMemory(g->device,memory,nullptr);
     }
     void initialize() {
-        if(!width || !height || uint64_t(width)*height>16000000 || mode<0 || mode>2) throw std::runtime_error("Invalid density resource");
+        if(!width || !height || uint64_t(width)*height>FC_MAX_PIXELS || mode<0 || mode>2) throw std::runtime_error("Invalid density resource");
         if(mode==1 && !g->storage16) throw std::runtime_error("16-bit density storage unsupported");
         if(mode==2 && !g->r16Image) throw std::runtime_error("R16F density image unsupported");
         dummy=std::make_unique<fc::Buffer>(g,16,false);

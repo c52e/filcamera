@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera.camera
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
@@ -325,9 +327,9 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         val raw = !compatible.isNullOrEmpty()
         require(route==null || raw) {tr(Texts.string.this_lens_has_no_supported_raw_mode)}
         val sizes = if (raw) compatible!! else requireNotNull(map.getOutputSizes(ImageFormat.JPEG))
-        // Standard mode only; prefer <= 16MP to avoid 50/200MP allocations on mobile heaps.
-        val still = sizes.filter { it.width.toLong()*it.height <= 16_000_000 }.maxByOrNull { it.width.toLong()*it.height }
-            ?: sizes.minBy { it.width.toLong()*it.height }
+        // Standard Camera2 modes only; do not open a stream above the product ceiling.
+        val still = sizes.filter { RawLimits.supports(it.width,it.height) }.maxByOrNull { it.width.toLong()*it.height }
+            ?: error(tr(Texts.string.effective_raw_exceeds_60_megapixels))
         val previews = map.getOutputSizes(SurfaceTexture::class.java)
         val bounded = previews.filter { it.width <= 1920 && it.height <= 1080 }
         val preview = (bounded.ifEmpty { previews.toList() }).minWith(compareBy<Size> { abs(it.width.toFloat()/it.height-still.width.toFloat()/still.height) }.thenBy { abs(it.width*it.height - 1280*960) })

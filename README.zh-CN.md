@@ -38,7 +38,7 @@ python tools/audit_public.py
 
 ## 限制
 
-需要 Android 10+、Vulkan 1.1 和支持的 Bayer RAW 模式，有效像素不超过 1600 万。
+需要 Android 10+、Vulkan 1.1 和支持的 Bayer RAW 模式，有效像素不超过 6000 万。
 历史版本主要在小米 15 Pro 上验证，其他设备需要实测。系统未公开的镜头无法使用。
 预览基于 ISP 和 LUT，与 RAW 成片存在差异；空间效果只用于成片。
 导入仅支持带本 App 显影记录的 DNG，暂不支持任意第三方 DNG。全尺寸处理可能需要数秒。

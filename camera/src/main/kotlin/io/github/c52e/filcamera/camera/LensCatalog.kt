@@ -1,5 +1,7 @@
 package io.github.c52e.filcamera.camera
 
+import io.github.c52e.filcamera.imaging.RawLimits
+
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
@@ -50,7 +52,7 @@ class LensCatalog(manager: CameraManager) {
                 require(c[C.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT] in 0..3) {tr(Texts.string.not_bayer)}
                 val pixels=requireNotNull(c[C.SENSOR_INFO_PIXEL_ARRAY_SIZE])
                 val active=requireNotNull(c[C.SENSOR_INFO_PRE_CORRECTION_ACTIVE_ARRAY_SIZE])
-                require(active.width().toLong()*active.height() in 1..16_000_000L) {tr(Texts.string.effective_raw_exceeds_16_megapixels)}
+                require(RawLimits.supports(active.width(),active.height())) {tr(Texts.string.effective_raw_exceeds_60_megapixels)}
                 require(c[C.SENSOR_BLACK_LEVEL_PATTERN]!=null && c[C.SENSOR_INFO_WHITE_LEVEL]!=null && c[C.SENSOR_COLOR_TRANSFORM1]!=null) {tr(Texts.string.missing_raw_calibration)}
                 val sizes=c[C.SCALER_STREAM_CONFIGURATION_MAP]?.getOutputSizes(ImageFormat.RAW_SENSOR).orEmpty()
                 require(sizes.filter {it.width.toLong()*it.height<=32_000_000}.any { (it.width==pixels.width && it.height==pixels.height) ||

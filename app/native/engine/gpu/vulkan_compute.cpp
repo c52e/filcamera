@@ -2338,12 +2338,15 @@ bool run_filming_stage(const FilmingStageRun& r, FilmingStageDiagnostics* diagno
             static_cast<VkDeviceSize>(r.table_b_floats_min) * sizeof(float);
         if (want > tblBBytes) tblBBytes = want;
     }
+    const bool stored_layers = resident && r.mode == kFilmModeLayers && fc_gpu_storage() != -2;
+    // DensityStorage validates the actual selected allocation (e.g. nine f16
+    // layers), not this generic pass's hypothetical nine-f32 destination.
     if (planeBytes > limits.maxStorageBufferRange ||
-        dstBytes > limits.maxStorageBufferRange ||
-        tblABytes > limits.maxStorageBufferRange)
+        (!stored_layers && dstBytes > limits.maxStorageBufferRange) ||
+        tblABytes > limits.maxStorageBufferRange || tblBBytes > limits.maxStorageBufferRange)
         return give_up("buffer-too-large");
 
-    if(resident && r.mode==kFilmModeLayers && fc_gpu_storage()!=-2) {
+    if(stored_layers) {
         try {
             const int mode=fc_gpu_selected_storage();
             if(!c.densityStorage || !c.densityStorage->matches(c.shared,r.width,r.height,mode)) {
