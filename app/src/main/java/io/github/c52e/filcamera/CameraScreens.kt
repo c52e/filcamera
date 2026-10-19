@@ -111,6 +111,7 @@ import java.io.File
                 Button(onClick=requestPermission) {Text(tr(Texts.string.allow_camera_access))}
                 TextButton(onClick={context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+context.packageName)))}) {Text(tr(Texts.string.open_permission_settings))}
             }
+            if(camera.processing) Text(tr(Texts.string.capture_complete_can_move),color=Accent,fontSize=16.sp)
             Box(Modifier.align(Alignment.BottomStart)) {notice()}
             val message=when {camera.switching->tr(Texts.string.switching_lens_2);camera.whiteBalance.error.isNotBlank()->camera.whiteBalance.error;camera.whiteBalance.pending->tr(Texts.string.updating_white_balance);camera.updating->tr(Texts.string.updating_preview);camera.framingPending->tr(Texts.string.adjusting_framing);else->camera.message}
             if(message.isNotBlank()) Text(message,Modifier.align(Alignment.TopStart).padding(8.dp)

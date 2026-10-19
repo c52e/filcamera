@@ -46,6 +46,17 @@ class FilmPreviewView(context: Context,
     @Volatile var sourceWidth = 1280
     @Volatile var sourceHeight = 960
     @Volatile var realtimeTimestamps = false
+    @Volatile private var processingPaused = false
+    /** Keep the surface/context alive, but draw black once and stop frame-driven GPU work. */
+    fun setProcessingPaused(paused: Boolean) {
+        if(processingPaused==paused) return
+        processingPaused=paused
+        queueEvent {
+            hasFrame=false
+            startNs=System.nanoTime();frameCount=0;drawTotalNs=0
+        }
+        requestRender()
+    }
     private class Target(val texture: SurfaceTexture, val surface: Surface) { var released = false }
     @Volatile private var target: Target? = null
     private var contextEpoch=0
@@ -131,7 +142,10 @@ class FilmPreviewView(context: Context,
         val texture = SurfaceTexture(oes)
         val next = Target(texture,Surface(texture))
         target=next
-        texture.setOnFrameAvailableListener { if(target===next) {frameAvailable.set(true); requestRender()} }
+        texture.setOnFrameAvailableListener { if(target===next) {
+            frameAvailable.set(true)
+            if(!processingPaused) requestRender()
+        } }
         startNs=System.nanoTime(); frameCount=0; drawTotalNs=0
         // Called from GL thread; controller serializes attachment on its camera handler.
         ready(texture,next.surface) { synchronized(next) {
@@ -140,7 +154,9 @@ class FilmPreviewView(context: Context,
     }
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) { widthPx=width; heightPx=height; glViewport(0,0,width,height) }
     override fun onDrawFrame(gl: GL10?) {
-        glClearColor(.025f,.025f,.025f,1f); glClear(GL_COLOR_BUFFER_BIT)
+        val black=if(processingPaused) 0f else .025f
+        glClearColor(black,black,black,1f); glClear(GL_COLOR_BUFFER_BIT)
+        if(processingPaused) return
         if (failed) return
         val t=target ?: return
         synchronized(t) {

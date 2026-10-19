@@ -160,6 +160,7 @@
     <string name="preview_not_updated_keeping_current_view_value">"预览未更新，保留当前取景：%1$s"</string>
     <string name="low_storage_keep_at_least_300_mb_free">"存储空间不足，请至少保留 300 MB"</string>
     <string name="capturing">"正在拍摄"</string>
+    <string name="capture_complete_can_move">"拍摄完成，可以移动相机"</string>
     <string name="developing">"正在显影"</string>
     <string name="rendering_film_photo">"正在生成胶片照片"</string>
     <string name="saving_to_gallery">"正在保存相册"</string>

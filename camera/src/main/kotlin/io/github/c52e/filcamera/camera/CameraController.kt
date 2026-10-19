@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
 data class CameraInfo(val id: String, val raw: Boolean, val preview: Size, val still: Size, val sensorRotation: Int, val front: Boolean, val evMin: Int, val evMax: Int, val evStep: Float, val realtimeTimestamps: Boolean, val optics: CameraOptics?=null, val route: LensRoute?=null, val ev: Int=0)
-data class CameraState(val ready: Boolean = false, val busy: Boolean = false, val message: String = tr(Texts.string.camera_has_not_started), val info: CameraInfo? = null, val failedRoute: LensRoute?=null, val unsupported: Boolean=false, val requestTag: Long=0)
+data class CameraState(val ready: Boolean = false, val busy: Boolean = false, val message: String = tr(Texts.string.camera_has_not_started), val info: CameraInfo? = null, val failedRoute: LensRoute?=null, val unsupported: Boolean=false, val requestTag: Long=0, val processing: Boolean=false)
 
 /** The receiver owns the Image until close(). Retiring the camera cannot invalidate that Image. */
 class CapturedFrame internal constructor(
@@ -186,7 +186,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         // CANCEL must remain constructible even if the requested point cannot be mapped.
         tapRegion=null;probeRegion=null
         try {
-            if(session!=null) session?.capture(previewRequest().apply {
+            if(session!=null && !processing) session?.capture(previewRequest().apply {
                 focusControl(this,CaptureRequest.CONTROL_AF_TRIGGER,CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
             }.build(),null,handler)
             clearFocus(reportIdle);if(session!=null) repeat()
@@ -271,14 +271,18 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             captureTimeout?.let(handler::removeCallbacks)
             focusTimeout?.let(handler::removeCallbacks)
             processing = true
+            // The still and its metadata are owned now; preview no longer helps this shot.
+            runCatching { session?.stopRepeating() }.onFailure {
+                android.util.Log.w("Camera2","Could not suspend preview requests",it)
+            }
             emit(tr(Texts.string.saving_and_developing))
             val frame = CapturedFrame(lease.image,result,cc,rotation,recipe,shotWb,route) { lease.close() }
-            try { captured(frame) } catch (e: Exception) { frame.close(); processing = false; emit(tr(Texts.string.could_not_start_processing_value, e.message)) }
+            try { captured(frame) } catch (e: Exception) { frame.close(); processing = false; restoreFocus(); emit(tr(Texts.string.could_not_start_processing_value, e.message)) }
             pairerClearLater()
         }
     }
     private fun pairerClearLater() { handler.post { pairer.clear() } }
-    private fun emit(message: String) = state(CameraState(session != null && latestResult != null, pending || processing, message, info,requestTag=requestTag))
+    private fun emit(message: String) = state(CameraState(session != null && latestResult != null, pending || processing, message, info,requestTag=requestTag,processing=processing))
 
     /** SurfaceTexture is producer-facing; release is called only once the camera has closed. */
     fun start(texture: SurfaceTexture, target: Surface, release: () -> Unit, preferRaw: Boolean = true, selectedRoute: LensRoute?=null, requestTag: Long=0, configured: (CameraInfo) -> Unit) {
@@ -460,6 +464,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         setTag(PreviewTag(wb,focusRevision,shotRevision,wbRevision))
     }
     private fun repeat() {
+        if(processing) return
         try { session?.setRepeatingRequest(previewRequest().build(),previewCallback,handler) }
         catch(e: IllegalArgumentException) {
             if(!controlledPreviewTone || toneRejected || previewTone==null) throw e
@@ -622,7 +627,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         focusTimeout?.let(handler::removeCallbacks); captureTimeout?.let(handler::removeCallbacks)
         pairer.clear(); unlock(); emit(message)
     }
-    fun processingFinished(message: String) { handler.post { processing = false; emit(message) } }
+    fun processingFinished(message: String) { handler.post { processing = false; restoreFocus(); emit(message) } }
     fun stop() { handler.post { stopInternal(); emit(tr(Texts.string.camera_paused)) } }
     private fun stopInternal() {
         generation++
@@ -640,7 +645,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         releaseTarget = null; surface = null
         owner?.retire(); owner = null
     }
-    private fun fail(message: String,unsupported: Boolean=false) { val failed=route;stopInternal();state(CameraState(false,processing,message,info,failed,unsupported,requestTag)) }
+    private fun fail(message: String,unsupported: Boolean=false) { val failed=route;stopInternal();state(CameraState(false,processing,message,info,failed,unsupported,requestTag,processing)) }
     private fun maybeQuit() { if (!alive && openRequests == 0) thread.quitSafely() }
     override fun close() { handler.post { alive = false; stopInternal(); maybeQuit() } }
 }

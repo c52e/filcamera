@@ -33,7 +33,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     fun clearTapFocus() {
         focusId++;focusMutable.value=null;controller.cancelTapFocus()
     }
-    data class State(val ready: Boolean=false,val busy: Boolean=false,val updating: Boolean=false,val message: String=tr(Texts.string.starting_camera),val info: CameraInfo?=null,val ev: Int=0,val diagnostics: String="",val completed: String="",val stage: String="",val sourceStarts: Int=0,val lutRequests: Int=0,val options: List<FocalOption> = emptyList(),val selectedFocal: String="",val switching: Boolean=false,val targetMm: Double?=null,val framing: CaptureFraming?=null,val framingPending: Boolean=false,val whiteBalance: io.github.c52e.filcamera.camera.WhiteBalanceStatus=io.github.c52e.filcamera.camera.WhiteBalanceStatus())
+    data class State(val ready: Boolean=false,val busy: Boolean=false,val updating: Boolean=false,val message: String=tr(Texts.string.starting_camera),val info: CameraInfo?=null,val ev: Int=0,val diagnostics: String="",val completed: String="",val stage: String="",val sourceStarts: Int=0,val lutRequests: Int=0,val options: List<FocalOption> = emptyList(),val selectedFocal: String="",val switching: Boolean=false,val targetMm: Double?=null,val framing: CaptureFraming?=null,val framingPending: Boolean=false,val whiteBalance: io.github.c52e.filcamera.camera.WhiteBalanceStatus=io.github.c52e.filcamera.camera.WhiteBalanceStatus(),val processing: Boolean=false)
     private var catalog=LensCatalog(context.getSystemService(android.hardware.camera2.CameraManager::class.java))
     private val unavailable=mutableSetOf<String>()
     private fun options()=FocalOptions.create(catalog.entries.filter {it.route.key !in unavailable})
@@ -52,7 +52,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     private var framingRevision=0L
     private var observedFocal: Double?=null
     private var configuredReady=false
-    private var view: FilmPreviewView?=null
+    @Volatile private var view: FilmPreviewView?=null
     private var effect=FilmTableEffect()
     private var recipe=runCatching {FilmRecipe.load(context)}.getOrDefault(FilmRecipe())
     @Volatile var comparison=false
@@ -68,14 +68,16 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         val old=mutable.value
         configuredReady=s.ready && s.info?.raw==true && !s.busy
         if(!s.busy && !saving && old.busy) synchronized(lock) {shot=null}
+        view?.setProcessingPaused(saving || s.processing)
         mutable.value=old.copy(ready=active && frames && configuredReady,info=s.info,busy=saving || s.busy,
-            message=if(saving || s.ready) old.message else s.message)
+            processing=saving || s.processing,message=if(saving || s.ready) old.message else s.message)
     }},{frame->
         val item=synchronized(lock) {shot.also {shot=null}}
         if(item==null) {frame.close();controllerFinished(tr(Texts.string.capture_canceled))}
         else {
             val matchedPreview=item.snapshot?.let {snapshot->synchronized(lock) {previewResults[snapshot.timestampNs]}}
             saving=true;item.timing.mark("rawArrived")
+            view?.setProcessingPaused(true)
             FilmWorker.execute {
                 item.timing.mark("finishWorkerStarted")
                 try {
@@ -198,7 +200,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         }},
         {metrics->main.post {if(active && current==generation) mutable.value=mutable.value.copy(diagnostics=metrics+" · "+effect.lutSource+" · "+effect.lutKey)}},
         {error->update {it.copy(message=error,ready=false,framingPending=false,switching=false)}},effect)
-        next.displayRotationDegrees=rotation;view=next;return next
+        next.displayRotationDegrees=rotation;next.setProcessingPaused(saving);view=next;return next
     }
     fun stop(expected: FilmPreviewView?=null) {
         if(expected!=null && view!==expected) return
@@ -206,7 +208,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         active=false;generation++;switchSerial++;main.removeCallbacks(bake)
         if(request>0) FilmEngine.cancelBake(request);request=0;bakingId=0
         synchronized(lock) {shot=null;previewResults.clear()};controller.stop();view?.cancelSnapshot();view?.onPause();view=null
-        mutable.value=mutable.value.copy(ready=false,updating=false,busy=saving)
+        mutable.value=mutable.value.copy(ready=false,updating=false,busy=saving,processing=saving)
         FilmWorker.execute {FilmEngine.close()}
     }
     fun close() {stop();controller.close()}

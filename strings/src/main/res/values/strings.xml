@@ -161,6 +161,7 @@
     <string name="preview_not_updated_keeping_current_view_value">"Preview not updated; keeping current view: %1$s"</string>
     <string name="low_storage_keep_at_least_300_mb_free">"Low storage. Keep at least 300 MB free"</string>
     <string name="capturing">"Capturing"</string>
+    <string name="capture_complete_can_move">"Capture complete — you can move the camera"</string>
     <string name="developing">"Developing"</string>
     <string name="rendering_film_photo">"Rendering film photo"</string>
     <string name="saving_to_gallery">"Saving to gallery"</string>
