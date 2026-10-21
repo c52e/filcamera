@@ -1,4 +1,5 @@
 #include "runtime.h"
+#include <cstdio>
 #include <atomic>
 #include <memory>
 #include <unordered_map>
@@ -30,6 +31,7 @@ struct Owner {
 thread_local std::unique_ptr<Owner> owner;
 thread_local std::string error;
 thread_local FcGpuTransfers transfers{};
+thread_local bool memoryFailed=false;
 thread_local uint32_t optimizations=FC_GPU_DEFAULT_MASK;
 thread_local int storageMode=-1;
 thread_local bool relaxedMath=true;
@@ -38,7 +40,21 @@ std::atomic<uint64_t> next{1};
 void check(VkResult r,const char* action) {
     if(r!=VK_SUCCESS) throw std::runtime_error(std::string(action)+": "+std::to_string(r));
 }
+// One low-memory guard for new GPU allocations; cached buffers need no admission.
+bool systemMemoryLow() noexcept {
+    bool low=false;
+    if(auto* file=std::fopen("/proc/meminfo","r")) {
+        char line[256];unsigned long long kib;
+        while(std::fgets(line,sizeof(line),file)) {
+            if(std::sscanf(line,"MemAvailable: %llu kB",&kib)==1) {low=kib<256ull*1024;break;}
+        }
+        std::fclose(file);
+    }
+    return low; // If counters cannot be read, rely on actual allocation results.
 }
+}
+extern "C" void fc_gpu_clear_memory_error() noexcept {memoryFailed=false;}
+extern "C" bool fc_gpu_memory_failed() noexcept {return memoryFailed;}
 extern "C" int fc_gpu_storage() noexcept {return storageMode;}
 extern "C" int fc_gpu_selected_storage() noexcept {return storageMode==-1?(owner && owner->gpu.storage16?1:0):storageMode;}
 extern "C" void fc_gpu_set_storage(int mode) noexcept {storageMode=mode;}
@@ -184,10 +200,15 @@ extern "C" VkResult fc_vkQueueSubmit(VkQueue q,uint32_t n,const VkSubmitInfo* in
     return result;
 }
 extern "C" VkResult fc_vkAllocateMemory(VkDevice d,const VkMemoryAllocateInfo* info,const VkAllocationCallbacks* callbacks,VkDeviceMemory* memory) noexcept {
-    const auto result=vkAllocateMemory(d,info,callbacks,memory);if(result!=VK_SUCCESS) return result;
+    if(systemMemoryLow()) {
+        memoryFailed=true;*memory=VK_NULL_HANDLE;return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+    const auto result=vkAllocateMemory(d,info,callbacks,memory);
+    if(result==VK_ERROR_OUT_OF_HOST_MEMORY || result==VK_ERROR_OUT_OF_DEVICE_MEMORY) memoryFailed=true;
+    if(result!=VK_SUCCESS) return result;
     if(owner && owner->gpu.device==d) {
         try {owner->allocations.emplace(*memory,info->allocationSize);owner->allocated+=info->allocationSize;++transfers.allocationCount;transfers.peakAllocationBytes=std::max(transfers.peakAllocationBytes,owner->allocated);}
-        catch(...) {vkFreeMemory(d,*memory,callbacks);*memory=VK_NULL_HANDLE;return VK_ERROR_OUT_OF_HOST_MEMORY;}
+        catch(...) {memoryFailed=true;vkFreeMemory(d,*memory,callbacks);*memory=VK_NULL_HANDLE;return VK_ERROR_OUT_OF_HOST_MEMORY;}
     }
     return result;
 }

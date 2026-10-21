@@ -35,8 +35,8 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     }
     data class State(val ready: Boolean=false,val busy: Boolean=false,val updating: Boolean=false,val message: String=tr(Texts.string.starting_camera),val info: CameraInfo?=null,val ev: Int=0,val diagnostics: String="",val completed: String="",val stage: String="",val sourceStarts: Int=0,val lutRequests: Int=0,val options: List<FocalOption> = emptyList(),val selectedFocal: String="",val switching: Boolean=false,val targetMm: Double?=null,val framing: CaptureFraming?=null,val framingPending: Boolean=false,val whiteBalance: io.github.c52e.filcamera.camera.WhiteBalanceStatus=io.github.c52e.filcamera.camera.WhiteBalanceStatus(),val processing: Boolean=false)
     private var catalog=LensCatalog(context.getSystemService(android.hardware.camera2.CameraManager::class.java))
-    private val unavailable=mutableSetOf<String>()
-    private fun options()=FocalOptions.create(catalog.entries.filter {it.route.key !in unavailable})
+    private val routeFailures=CameraRouteFailures()
+    private fun options()=FocalOptions.create(catalog.entries)
     private var selected=options().firstOrNull {it.targetMm==null && it.lens?.route?.lensId==catalog.defaultLensId}
     private var confirmed: FocalOption?=null
     private var switchSerial=0L
@@ -64,9 +64,10 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     private fun update(block: (State)->State) {main.post {mutable.value=block(mutable.value)}}
     private val controller: CameraController=CameraController(context,{s-> main.post {
         if(!active || s.requestTag!=switchSerial) return@post
-        if(s.failedRoute!=null) {switchFailed(s.failedRoute!!,s.unsupported,s.message);return@post}
+        if(s.failedRoute!=null) {switchFailed(s.failedRoute!!,s.message);return@post}
         val old=mutable.value
         configuredReady=s.ready && s.info?.raw==true && !s.busy
+        if(configuredReady && frames) confirmed=selected
         if(!s.busy && !saving && old.busy) synchronized(lock) {shot=null}
         view?.setProcessingPaused(saving || s.processing)
         mutable.value=old.copy(ready=active && frames && configuredReady,info=s.info,busy=saving || s.busy,
@@ -121,7 +122,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         mutable.value=s.copy(targetMm=target,framing=selectedFraming,framingPending=true)
         view?.setCenterCrop(selectedFraming.scale) {main.post {
             if(active && generation==gen && framingRevision==rev) {
-                frames=true;confirmed=selected
+                frames=true;if(configuredReady) confirmed=selected
                 mutable.value=mutable.value.copy(framingPending=false,switching=false,ready=configuredReady && !saving,message=switchError)
                 if(needsLut && !mutable.value.updating) scheduleLut()
             }
@@ -132,7 +133,8 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     }
     fun selectFocal(id: String) {
         if(mutable.value.busy || saving) return
-        val option=options().firstOrNull {it.id==id && it.lens!=null} ?: return
+        routeFailures.resetAttempts()
+        val option=mutable.value.options.firstOrNull {it.id==id && it.lens!=null} ?: return
         val same=selected?.lens?.route==option.lens?.route
         selected=option;switchError=""
         mutable.value=mutable.value.copy(selectedFocal=id,targetMm=option.targetMm)
@@ -156,36 +158,37 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         mutable.value=mutable.value.copy(sourceStarts=mutable.value.sourceStarts+1)
         // Primary camera only: measured improvement. Other lenses retained ISP after A/B regression.
         controller.setControlledPreviewTone(route.lensId==catalog.defaultLensId)
-        controller.start(texture,surface,release,true,route,serial) {info->
+        controller.start(texture,surface,release,route,serial) {info->
             main.post {if(active && serial==switchSerial && next===view) {
                 next.sourceWidth=info.preview.width;next.sourceHeight=info.preview.height;next.realtimeTimestamps=info.realtimeTimestamps
                 mutable.value=mutable.value.copy(info=info,ev=info.ev);refreshFraming()
             }}
         }
-        main.postDelayed({if(active && serial==switchSerial && !frames) switchFailed(route,false,tr(Texts.string.lens_startup_timed_out_please_retry))},10000)
+        main.postDelayed({if(active && serial==switchSerial && !frames) switchFailed(route,tr(Texts.string.lens_startup_timed_out_please_retry))},10000)
     }
-    private fun switchFailed(route: LensRoute,unsupported: Boolean,message: String) {
-        if(route!=selected?.lens?.route) return
+    private fun switchFailed(route: LensRoute,message: String) {
+        val failed=selected?.takeIf {it.lens?.route==route} ?: return
         switchSerial++;framingRevision++;frames=false;configuredReady=false;controller.stop()
-        if(unsupported) unavailable+=route.key
-        val choices=options();val old=confirmed?.let {last->choices.firstOrNull {it.id==last.id && it.lens!=null && it.lens?.route!=route}}
-        val retry=choices.firstOrNull {it.id==selected?.id && it.lens!=null && it.lens?.route!=route}
-        val fallback=old ?: retry ?: if(unsupported) choices.firstOrNull {it.lens!=null && it.lens?.route!=route} else null
+        val fallback=routeFailures.fallback(failed,confirmed,catalog.entries)
         switchError=message+(if(fallback!=null) tr(Texts.string.available_lens_restored) else "")
-        mutable.value=mutable.value.copy(options=choices,ready=false,switching=false,framingPending=false,message=switchError)
+        mutable.value=mutable.value.copy(ready=false,switching=false,framingPending=false,message=switchError)
         if(fallback!=null) {
             selected=fallback;mutable.value=mutable.value.copy(selectedFocal=fallback.id,targetMm=fallback.targetMm);switchLens()
-        } else if(unsupported) {selected=null;mutable.value=mutable.value.copy(selectedFocal="")}
+        }
     }
     private fun controllerFinished(message: String): Unit {controller.processingFinished(message)}
     fun createPreview(uiContext: Context,rotation: Int): FilmPreviewView {
         stop()
+        routeFailures.resetAttempts()
         // Permission/service failures during initial discovery must not require clearing app data.
         if(catalog.entries.isEmpty()) {
             catalog=LensCatalog(context.getSystemService(android.hardware.camera2.CameraManager::class.java))
-            selected=options().firstOrNull {it.targetMm==null && it.lens?.route?.lensId==catalog.defaultLensId}
-            mutable.value=mutable.value.copy(options=options(),selectedFocal=selected?.id.orEmpty(),targetMm=selected?.targetMm)
         }
+        val choices=options()
+        selected=choices.firstOrNull {it.id==selected?.id && it.lens!=null}
+            ?: choices.firstOrNull {it.targetMm==null && it.lens?.route?.lensId==catalog.defaultLensId}
+            ?: choices.firstOrNull {it.lens!=null}
+        mutable.value=mutable.value.copy(options=choices,selectedFocal=selected?.id.orEmpty(),targetMm=selected?.targetMm)
         active=true;generation++;frames=false;needsLut=true;effect=FilmTableEffect()
         mutable.value=mutable.value.copy(ready=false,diagnostics="",message=tr(Texts.string.starting_camera))
         val current=generation;switchSerial++
@@ -251,7 +254,8 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
                     try {if(current()) effect.replaceLut(table.lut);finish()}
                     catch(e: Exception) {finish(tr(Texts.string.preview_not_updated_capture_uses_the_selected_recipe_value, e.message))}
                 } ?: finish()
-            } catch(e: Exception) {finish(if(current()) tr(Texts.string.preview_not_updated_keeping_current_view_value, e.message) else null)}
+            } catch(e: OutOfMemoryError) {finish(if(current()) tr(Texts.string.out_of_memory) else null)}
+            catch(e: Exception) {finish(if(current()) tr(Texts.string.preview_not_updated_keeping_current_view_value, e.message) else null)}
         }
     }
     fun capture(rotation: Int) {

@@ -34,4 +34,15 @@ class FocalOptionsTest {
         assertNull(FocalOptions.create(lenses(120.0)).first {it.targetMm==85.0}.lens)
         assertTrue(FocalOptions.create(listOf(a.copy(equivalentMm=null))).filter {it.targetMm!=null}.all {it.lens==null})
     }
+    @Test fun rejectedRoutePreservesPhysicalIdentityAndCropThroughAlias() {
+        val direct=RawLens(LensRoute("a","a"),24.0,null)
+        val alias=direct.copy(route=LensRoute("logical","a","a"))
+        val entries=listOf(direct,alias)
+        val before=FocalOptions.create(entries)
+        val after=FocalOptions.create(entries.filter {it.route.key!=direct.route.key})
+        for(id in listOf("native:a","crop:35","crop:50","crop:85")) {
+            assertEquals(direct.route,before.first {it.id==id}.lens!!.route)
+            assertEquals(alias.route,after.first {it.id==id}.lens!!.route)
+        }
+    }
 }

@@ -135,6 +135,7 @@ struct Session {
 extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_VulkanRawDeveloper_process(
     JNIEnv* env,jobject,jobject input,jintArray parameters,jobject output,jdoubleArray timing,jlongArray imageHandle) {
     try {
+        fc_gpu_clear_memory_error();
         const auto started=Clock::now();std::array<double,17> times{};
         const auto gpuStart=fc_gpu_counts();
         auto length=env->GetArrayLength(parameters);require(length>=40,"RAW parameters truncated");
@@ -187,8 +188,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vul
         env->SetDoubleArrayRegion(timing,0,17,times.data());
         if(adopted) {jlong id=static_cast<jlong>(adopted);env->SetLongArrayRegion(imageHandle,0,1,&id);if(env->ExceptionCheck()) {fc_gpu_drop(adopted);return nullptr;}}
         return env->NewStringUTF(s.properties.deviceName);
+    } catch(const std::bad_alloc&) {
+        if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),"Native allocation failed");
+        return nullptr;
     } catch(const std::exception& e) {
-        if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/IllegalStateException"),e.what());
+        if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass(fc_gpu_memory_failed()?"java/lang/OutOfMemoryError":"java/lang/IllegalStateException"),e.what());
         return nullptr;
     }
 }

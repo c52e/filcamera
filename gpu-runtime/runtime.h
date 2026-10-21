@@ -54,6 +54,9 @@ enum FcGpuOptimization : uint32_t {
 constexpr uint32_t FC_GPU_DEFAULT_MASK=FC_RAW_BATCH_AND_NATIVE|FC_BUFFER_HANDOFF|FC_GRAIN_SUBTRACT|
     FC_HALATION_LOG|FC_ACCUMULATOR_INIT|FC_PRINT_DIFFUSION|FC_HALATION_BATCH|FC_COMPLETED_RELEASE|FC_SPATIAL_MULTIRATE|FC_DIFFUSION_RADIAL_TABLE|FC_DIFFUSION_MULTISCALE;
 extern "C" {
+// Per-task failure classification; independent of allocation statistics/cached buffers.
+void fc_gpu_clear_memory_error() noexcept;
+bool fc_gpu_memory_failed() noexcept;
 // Test selection is made only between closed render sessions: -1 = production.
 int fc_gpu_storage() noexcept;
 int fc_gpu_selected_storage() noexcept;

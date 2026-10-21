@@ -1,7 +1,5 @@
 package io.github.c52e.filcamera.camera
 
-import io.github.c52e.filcamera.imaging.RawLimits
-
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
@@ -28,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
 data class CameraInfo(val id: String, val raw: Boolean, val preview: Size, val still: Size, val sensorRotation: Int, val front: Boolean, val evMin: Int, val evMax: Int, val evStep: Float, val realtimeTimestamps: Boolean, val optics: CameraOptics?=null, val route: LensRoute?=null, val ev: Int=0)
-data class CameraState(val ready: Boolean = false, val busy: Boolean = false, val message: String = tr(Texts.string.camera_has_not_started), val info: CameraInfo? = null, val failedRoute: LensRoute?=null, val unsupported: Boolean=false, val requestTag: Long=0, val processing: Boolean=false)
+data class CameraState(val ready: Boolean = false, val busy: Boolean = false, val message: String = tr(Texts.string.camera_has_not_started), val info: CameraInfo? = null, val failedRoute: LensRoute?=null, val requestTag: Long=0, val processing: Boolean=false)
 
 /** The receiver owns the Image until close(). Retiring the camera cannot invalidate that Image. */
 class CapturedFrame internal constructor(
@@ -285,30 +283,28 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     private fun emit(message: String) = state(CameraState(session != null && latestResult != null, pending || processing, message, info,requestTag=requestTag,processing=processing))
 
     /** SurfaceTexture is producer-facing; release is called only once the camera has closed. */
-    fun start(texture: SurfaceTexture, target: Surface, release: () -> Unit, preferRaw: Boolean = true, selectedRoute: LensRoute?=null, requestTag: Long=0, configured: (CameraInfo) -> Unit) {
+    fun start(texture: SurfaceTexture, target: Surface, release: () -> Unit, selectedRoute: LensRoute, requestTag: Long=0, configured: (CameraInfo) -> Unit) {
         handler.post {
             if (!alive) { release(); return@post }
             stopInternal()
             val gen = generation
             surface = target; releaseTarget = release; route=selectedRoute;this.requestTag=requestTag
             try {
-                val choices = manager.cameraIdList.map { it to manager.getCameraCharacteristics(it) }
-                val selected = if(selectedRoute!=null) selectedRoute.openId to manager.getCameraCharacteristics(selectedRoute.lensId) else choices.sortedBy { (_, c) ->
-                    (if (c[CameraCharacteristics.LENS_FACING] == CameraCharacteristics.LENS_FACING_BACK) 0 else 10) +
-                    (if (c[CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES]?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) 0 else 1)
-                }.firstOrNull() ?: error(tr(Texts.string.no_available_camera_found))
-                chars = selected.second
-                logicalChars=manager.getCameraCharacteristics(selected.first)
-                physicalKeys=if(selectedRoute?.physicalId!=null) logicalChars?.availablePhysicalCameraRequestKeys?.toSet() ?: emptySet() else emptySet()
-                configure(selected.first, selected.second, texture, preferRaw, configured)
-                open(selected.first, gen, texture, configured)
-            } catch (e: Exception) { fail(tr(Texts.string.could_not_open_camera_value, e.message)) }
+                chars=manager.getCameraCharacteristics(selectedRoute.lensId)
+                logicalChars=if(selectedRoute.openId==selectedRoute.lensId) chars else manager.getCameraCharacteristics(selectedRoute.openId)
+                physicalKeys=if(selectedRoute.physicalId!=null) logicalChars?.availablePhysicalCameraRequestKeys?.toSet() ?: emptySet() else emptySet()
+                configure(selectedRoute,requireNotNull(chars),texture,configured)
+                open(selectedRoute.openId,gen)
+            } catch (e: Exception) {
+                android.util.Log.e("Camera2","Could not start route $selectedRoute",e)
+                fail(tr(Texts.string.could_not_open_camera_value, e.message))
+            }
         }
     }
 
-    private fun configure(id: String, c: CameraCharacteristics, texture: SurfaceTexture, allowRaw: Boolean, configured: (CameraInfo) -> Unit) {
+    private fun configure(selectedRoute: LensRoute, c: CameraCharacteristics, texture: SurfaceTexture, configured: (CameraInfo) -> Unit) {
         previewTone=PreviewToneCurve.create(c);toneRejected=false;toneMismatches=0
-        val identity=route?.lensId ?: id
+        val identity=selectedRoute.lensId
         if(wbCamera!=identity) {wbCamera?.let {whiteBalances[it]=wb};wb=whiteBalances[identity] ?: WhiteBalance();wbCamera=identity}
         val previousEv=ev*(info?.evStep ?: 0f)
         wbRevision++;wbError=""
@@ -322,30 +318,28 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         if(wbRange()?.let {range->wb.kelvin?.let(range::contains) ?: true} != true) wb=WhiteBalance()
         wbPending=wb.manual;reportWb()
         val map = requireNotNull(c[CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP])
-        val rawSizes = if (allowRaw && c[CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES]?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) map.getOutputSizes(ImageFormat.RAW_SENSOR)?.filter { it.width.toLong()*it.height <= 32_000_000 }?.toTypedArray() else null
-        val compatible=if(route!=null) rawSizes?.filter { size ->
-            val pixels=c[CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE]
-            val active=c[CameraCharacteristics.SENSOR_INFO_PRE_CORRECTION_ACTIVE_ARRAY_SIZE]
+        require(c[CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES]?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)==true) {tr(Texts.string.this_lens_has_no_supported_raw_mode)}
+        val pixels=c[CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE]
+        val active=c[CameraCharacteristics.SENSOR_INFO_PRE_CORRECTION_ACTIVE_ARRAY_SIZE]
+        val compatible=map.getOutputSizes(ImageFormat.RAW_SENSOR).orEmpty().filter { size ->
             size==pixels || (active!=null && size.width==active.width() && size.height==active.height() && active.left%2==0 && active.top%2==0)
-        }?.toTypedArray() else rawSizes
-        val raw = !compatible.isNullOrEmpty()
-        require(route==null || raw) {tr(Texts.string.this_lens_has_no_supported_raw_mode)}
-        val sizes = if (raw) compatible!! else requireNotNull(map.getOutputSizes(ImageFormat.JPEG))
-        // Standard Camera2 modes only; do not open a stream above the product ceiling.
-        val still = sizes.filter { RawLimits.supports(it.width,it.height) }.maxByOrNull { it.width.toLong()*it.height }
+        }
+        require(compatible.isNotEmpty()) {tr(Texts.string.this_lens_has_no_supported_raw_mode)}
+        // Prefer the smallest compatible native RAW mode to bound capture/development memory.
+        val still = smallestRawOutput(compatible) {it.width to it.height}
             ?: error(tr(Texts.string.effective_raw_exceeds_60_megapixels))
         val previews = map.getOutputSizes(SurfaceTexture::class.java)
         val bounded = previews.filter { it.width <= 1920 && it.height <= 1080 }
         val preview = (bounded.ifEmpty { previews.toList() }).minWith(compareBy<Size> { abs(it.width.toFloat()/it.height-still.width.toFloat()/still.height) }.thenBy { abs(it.width*it.height - 1280*960) })
         val range = c[CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE]
-        info = CameraInfo(id,raw,preview,still,c[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0,
+        info = CameraInfo(selectedRoute.openId,true,preview,still,c[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0,
             c[CameraCharacteristics.LENS_FACING] == CameraCharacteristics.LENS_FACING_FRONT,range?.lower ?: 0,range?.upper ?: 0,c[CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP]?.toFloat() ?: 0f,
             c[CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE] == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME, CameraOptics.read(c),route)
         ev = (if(info!!.evStep>0f) (previousEv/info!!.evStep).roundToInt() else 0).coerceIn(info!!.evMin,info!!.evMax)
         info=info!!.copy(ev=ev)
         texture.setDefaultBufferSize(preview.width,preview.height)
         owner?.retire()
-        val next = ReaderOwner(ImageReader.newInstance(still.width,still.height,if (raw) ImageFormat.RAW_SENSOR else ImageFormat.JPEG,3))
+        val next = ReaderOwner(ImageReader.newInstance(still.width,still.height,ImageFormat.RAW_SENSOR,3))
         owner = next
         next.reader.setOnImageAvailableListener({
             try {
@@ -357,7 +351,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     }
 
     @SuppressLint("MissingPermission")
-    private fun open(id: String, gen: Int, texture: SurfaceTexture, configured: (CameraInfo) -> Unit) {
+    private fun open(id: String, gen: Int) {
         val targetRelease = releaseTarget
         openRequests++
         targetOwnedByCamera = true
@@ -366,10 +360,15 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             override fun onOpened(camera: CameraDevice) {
                 if (gen != generation || !alive) { camera.close(); return }
                 device = camera
-                createSession(gen, texture, configured)
+                createSession(gen)
             }
             override fun onDisconnected(camera: CameraDevice) { camera.close(); if (gen == generation) fail(tr(Texts.string.camera_disconnected_please_retry)) }
-            override fun onError(camera: CameraDevice, error: Int) { camera.close(); if (gen == generation) fail(tr(Texts.string.camera2_error_value_please_retry, error)) }
+            override fun onError(camera: CameraDevice, error: Int) {
+                camera.close()
+                if (gen != generation) return
+                android.util.Log.e("Camera2","Device error $error on route $route; previewStarted=${latestResult!=null}")
+                fail(tr(Texts.string.camera2_error_value_please_retry, error))
+            }
             override fun onClosed(camera: CameraDevice) {
                 if (!closed) { closed = true; targetRelease?.invoke(); openRequests--; maybeQuit() }
             }
@@ -377,7 +376,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     }
 
     @Suppress("DEPRECATION")
-    private fun createSession(gen: Int, texture: SurfaceTexture, configured: (CameraInfo) -> Unit) {
+    private fun createSession(gen: Int) {
         val camera = device ?: return
         try {
             val outputs=listOf(requireNotNull(surface),requireNotNull(owner).reader.surface).map { output ->
@@ -388,26 +387,18 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
                 override fun onConfigured(s: CameraCaptureSession) {
                     if (gen != generation) { s.close(); return }
                     session = s
-                    try { repeat();if(wbPending) armWbTimeout(); emit(if (info!!.raw) tr(Texts.string.raw_gpu_preview) else tr(Texts.string.jpeg_mode_raw_unavailable)) }
+                    try { repeat();if(wbPending) armWbTimeout(); emit(tr(Texts.string.raw_gpu_preview)) }
                     catch (e: Exception) { fail(tr(Texts.string.preview_failed_value, e.message)) }
                 }
                 override fun onConfigureFailed(s: CameraCaptureSession) {
                     s.close()
                     if (gen != generation) return
-                    if (route!=null) fail(tr(Texts.string.device_rejected_this_lens_s_preview_raw_stream_combination),true)
-                    else if (info?.raw == true) {
-                        try { configure(info!!.id,chars!!,texture,false,configured); createSession(gen,texture,configured) }
-                        catch (e: Exception) { fail(tr(Texts.string.stream_configuration_failed_value, e.message)) }
-                    } else fail(tr(Texts.string.device_rejected_the_preview_capture_stream_combination))
+                    fail(tr(Texts.string.device_rejected_this_lens_s_preview_raw_stream_combination))
                 }
             }))
         } catch (e: Exception) {
             if(gen!=generation) return
-            if(route!=null) {fail(tr(Texts.string.could_not_create_raw_session_value, e.message),e is IllegalArgumentException);return}
-            if (gen == generation && info?.raw == true) {
-                try { configure(info!!.id,chars!!,texture,false,configured); createSession(gen,texture,configured) }
-                catch (fallback: Exception) { fail(tr(Texts.string.could_not_create_session_value, fallback.message)) }
-            } else fail(tr(Texts.string.could_not_create_session_value, e.message))
+            fail(tr(Texts.string.could_not_create_raw_session_value, e.message))
         }
     }
 
@@ -480,7 +471,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         }
         override fun onCaptureCompleted(s: CameraCaptureSession, request: CaptureRequest, total: TotalCaptureResult) {
             if(s !== session) return
-            val result=sensorResult(total) ?: run {fail(tr(Texts.string.missing_captureresult_for_the_selected_physical_lens),true);return}
+            val result=sensorResult(total) ?: run {fail(tr(Texts.string.missing_captureresult_for_the_selected_physical_lens));return}
             if(controlledPreviewTone && !toneRejected && request[CaptureRequest.TONEMAP_MODE]==CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE) {
                 val accepted=result[CaptureResult.TONEMAP_MODE]==CaptureResult.TONEMAP_MODE_CONTRAST_CURVE &&
                     previewTone?.let {PreviewToneCurve.error(it,result[CaptureResult.TONEMAP_CURVE])<=.02f}==true
@@ -493,7 +484,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             }
             val firstResult=latestResult==null
             latestResult=result
-            if(firstResult) emit(if(info?.raw==true) tr(Texts.string.raw_gpu_preview) else tr(Texts.string.jpeg_mode_raw_unavailable))
+            if(firstResult) emit(tr(Texts.string.raw_gpu_preview))
             val tag=request.tag as? PreviewTag
             if(tag?.focus==focusRevision && probeRegion!=null) {acceptProbe(request,result);return}
             if(tag?.focus==focusRevision && tapPhase!=FocusPhase.IDLE) {
@@ -598,14 +589,11 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         try {
             val request = requireNotNull(device).createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(requireNotNull(owner).reader.surface); controls(this)
-                set(CaptureRequest.JPEG_ORIENTATION,rotation)
-                if(info?.raw==true) {
-                    // Request metadata only on stills; do not add work to the preview stream.
-                    set(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE,CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE_ON)
-                    val shading=chars?.get(CameraCharacteristics.SHADING_AVAILABLE_MODES) ?: intArrayOf()
-                    if(shading.contains(CaptureRequest.SHADING_MODE_FAST)) set(CaptureRequest.SHADING_MODE,CaptureRequest.SHADING_MODE_FAST)
-                    else if(shading.contains(CaptureRequest.SHADING_MODE_HIGH_QUALITY)) set(CaptureRequest.SHADING_MODE,CaptureRequest.SHADING_MODE_HIGH_QUALITY)
-                }
+                // Request RAW metadata only on stills; rotation is stored with the DNG.
+                set(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE,CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE_ON)
+                val shading=chars?.get(CameraCharacteristics.SHADING_AVAILABLE_MODES) ?: intArrayOf()
+                if(shading.contains(CaptureRequest.SHADING_MODE_FAST)) set(CaptureRequest.SHADING_MODE,CaptureRequest.SHADING_MODE_FAST)
+                else if(shading.contains(CaptureRequest.SHADING_MODE_HIGH_QUALITY)) set(CaptureRequest.SHADING_MODE,CaptureRequest.SHADING_MODE_HIGH_QUALITY)
             }
             captureTimeout = Runnable { if (pending) abortCapture(tr(Texts.string.capture_timed_out_please_retry)) }.also { handler.postDelayed(it,10000) }
             session!!.capture(request.build(),object : CameraCaptureSession.CaptureCallback() {
@@ -645,7 +633,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         releaseTarget = null; surface = null
         owner?.retire(); owner = null
     }
-    private fun fail(message: String,unsupported: Boolean=false) { val failed=route;stopInternal();state(CameraState(false,processing,message,info,failed,unsupported,requestTag,processing)) }
+    private fun fail(message: String) { val failed=route;stopInternal();state(CameraState(false,processing,message,info,failed,requestTag,processing)) }
     private fun maybeQuit() { if (!alive && openRequests == 0) thread.quitSafely() }
     override fun close() { handler.post { alive = false; stopInternal(); maybeQuit() } }
 }

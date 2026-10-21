@@ -83,6 +83,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_io_github_c52e_filcamera_FilmEngine_acti
 extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_bakeNative(
     JNIEnv* env,jobject,jstring assets,jlong request,jstring target,jfloat ev,jboolean compensatePrint,jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile) {
     try {
+        fc_gpu_clear_memory_error();
         Utf a(env,assets),t(env,target),f(env,filmProfile),paper(env,paperProfile);long long id=request;
         if(id<=0 || std::filesystem::exists(t.bytes)) throw std::runtime_error("Invalid bake request or occupied output path");
         struct OutputGuard { std::string path;bool committed=false;~OutputGuard(){if(!committed){std::error_code ec;std::filesystem::remove(path,ec);}} } guard{t.bytes};
@@ -112,6 +113,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_ba
         auto status=spk_simulate_cancellable(context->engine.get(),&input,&p,&out,bakeCancelled,&id);
         const double renderMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-renderStart).count();
         if(status==SPK_ERR_CANCELLED || bakeCancelled(&id)) { context.reset();return env->NewStringUTF("{\"cancelled\":true}"); }
+        if(status==SPK_ERR_OOM) throw std::bad_alloc();
         if(status!=SPK_OK || !out.data || out.width!=845 || out.height!=325) throw std::runtime_error("LUT render failed");
         std::vector<uint16_t> table(count*4);
         for(int i=0;i<count;i++) {
@@ -133,7 +135,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_ba
             std::to_string(renderMs)+",\"totalMs\":"+std::to_string(total)+",\"gpuAllocationBytes\":"+std::to_string(context->gpu.allocationBytes())+
             ",\"relaxedMath\":"+(fc_gpu_relaxed()?"true":"false")+",\"lutStorage\":\"rgba16f\",\"workgroup\":"+std::to_string(fc_gpu_workgroup())+"}";
         auto result=env->NewStringUTF(json.c_str());if(result) guard.committed=true;return result;
-    } catch(const std::exception& e) {context.reset();if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/IllegalStateException"),e.what());return nullptr;}
+    } catch(const std::bad_alloc&) {context.reset();if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),"Native allocation failed");return nullptr;}
+    catch(const std::exception& e) {context.reset();if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass(fc_gpu_memory_failed()?"java/lang/OutOfMemoryError":"java/lang/IllegalStateException"),e.what());return nullptr;}
     catch(...) {context.reset();env->ThrowNew(env->FindClass("java/lang/IllegalStateException"),"LUT bake failure");return nullptr;}
 }
 extern "C" JNIEXPORT void JNICALL Java_io_github_c52e_filcamera_FilmEngine_cancel(JNIEnv*,jobject,jlong id) {
@@ -201,6 +204,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
     long long id=request;RenderScope progress(id);
     try {
         fc_gpu_reset_counts();
+        fc_gpu_clear_memory_error();
         Utf a(env,assets),s(env,source),t(env,target),f(env,filmProfile),paper(env,paperProfile);
         if(width<1 || height<1 || width>16384 || height>16384 || size_t(width)*height>FC_MAX_PIXELS || !std::isfinite(ev) || std::abs(ev)>2 || id<=0)
             throw std::runtime_error("Unsupported dimensions or exposure");
@@ -268,6 +272,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         auto status=spk_simulate_cancellable(context->engine.get(),&in,&p,&out,cancelled,&id);
         double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
         if(status==SPK_ERR_CANCELLED || cancelled(&id)){context->gpu.close();return env->NewStringUTF("{\"cancelled\":true}");}
+        if(status==SPK_ERR_OOM) throw std::bad_alloc();
         if(status!=SPK_OK) throw std::runtime_error(std::string("Render failed: ")+spk_last_error_message());
         if((!packed && !out.data) || out.width!=width || out.height!=height) throw std::runtime_error("Output shape mismatch");
         if(packed) {
@@ -298,7 +303,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
             ",\"peakAllocationBytes\":"+std::to_string(transfers.peakAllocationBytes)+"}}";
         if(deviceInput && packed && (transfers.imageUpload || transfers.intermediateReadback)) throw std::runtime_error("Unexpected host transfer in resident render");
         return env->NewStringUTF(result.c_str());
-    }catch(const std::exception& e){context.reset();if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/IllegalStateException"),e.what());return nullptr;}
+    }catch(const std::bad_alloc&){context.reset();if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),"Native allocation failed");return nullptr;}
+    catch(const std::exception& e){context.reset();if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass(fc_gpu_memory_failed()?"java/lang/OutOfMemoryError":"java/lang/IllegalStateException"),e.what());return nullptr;}
     catch(...){context.reset();if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");env->ThrowNew(env->FindClass("java/lang/IllegalStateException"),"Native render failure");return nullptr;}
 }
 

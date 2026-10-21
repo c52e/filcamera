@@ -68,8 +68,9 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 result.put("output",PhotoOutput.metadata(file,encoding))
                 rendered=result.put("input",JSONObject().put("kind","dng").put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
                     .put("framing",prepared.framing.json()).put("renderQuality","editing-preview").put("timing",timing.json()).put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use {it.readText()}))
-            } catch(e: OutOfMemoryError) {error=tr(Texts.string.out_of_memory_original_and_previous_result_retained)}
-            catch(e: Exception) {if(e !is InterruptedException) error=e.message ?: tr(Texts.string.development_failed)}
+            } catch(e: OutOfMemoryError) {input.close();FilmEngine.close();error=tr(Texts.string.out_of_memory_original_and_previous_result_retained)}
+            catch(e: InterruptedException) { /* Parameter changes reuse the prepared RAW input. Page close releases it on FilmWorker. */ }
+            catch(e: Exception) {input.close();FilmEngine.close();error=e.message ?: tr(Texts.string.development_failed)}
             main.post {
                 running=false
                 if(current() && rendered!=null) {

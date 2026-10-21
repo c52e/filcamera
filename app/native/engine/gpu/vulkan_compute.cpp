@@ -3581,11 +3581,6 @@ constexpr double kHalTailRatio[3] = {0.5360, 1.5236, 2.7684};
 constexpr uint32_t kHalSetCount = 17u;
 constexpr VkDeviceSize kHalPixelBytes = 12;      // three f32, packed
 constexpr uint32_t kHalWorkBuffers = 4u;         // src, sum, x, xT
-// Whole-frame residency ceiling for the four work buffers (48 B/px: ~22 MP).
-// Above it the pass refuses and the CPU runs; bringing back row bands with the
-// IIR state carried through host-side storage is the upgrade path if a larger
-// export ever needs the GPU pass.
-constexpr VkDeviceSize kHalWorkBudgetBytes = 1024ull << 20;
 constexpr VkDeviceSize kHalStagingBytes = 64ull << 20;  // upload/readback band
 constexpr uint32_t kHalGroupX = 32u, kHalGroupY = 8u;
 constexpr uint32_t kHalSrc = 0u, kHalSum = 1u, kHalX = 2u, kHalXT = 3u;
@@ -3817,13 +3812,13 @@ bool halation_scatter_locked(Ctx& c, const HalationScatterRequest& r, double* ou
     if (!(sigmaMax <= kHalMaxSigma)) { d.reason = "sigma-too-large"; return false; }
 
     // Whole-frame residency: four packed f32 planes, each one storage range,
-    // against the fixed budget and the device's largest device-local heap.
+    // checked against device storage ranges and the largest device-local heap.
     const uint32_t W = static_cast<uint32_t>(r.width), H = static_cast<uint32_t>(r.height);
     const VkDeviceSize frameBytes = static_cast<VkDeviceSize>(npix64) * kHalPixelBytes;
     const VkDeviceSize workBytes = frameBytes * kHalWorkBuffers;
     const VkPhysicalDeviceLimits& lim = c.properties.limits;
     const uint32_t maxDim = std::max(W, H);
-    if (workBytes > kHalWorkBudgetBytes || frameBytes > lim.maxStorageBufferRange ||
+    if (frameBytes > lim.maxStorageBufferRange ||
         workBytes > c.largestHeapFor(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) ||
         (maxDim + kHalLineThreads - 1u) / kHalLineThreads > lim.maxComputeWorkGroupCount[0] ||
         (maxDim + kHalTransposeTile - 1u) / kHalTransposeTile >

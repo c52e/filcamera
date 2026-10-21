@@ -11,6 +11,12 @@ import android.hardware.camera2.CameraManager
 import java.util.Locale
 import kotlin.math.abs
 
+/** A stale/blocked public ID must not prevent discovery of the remaining cameras. */
+internal fun <T> readCameraEntries(ids: List<String>, read: (String) -> T, rejected: (String, Exception) -> Unit): List<Pair<String,T>> =
+    ids.mapNotNull { id ->
+        try { id to read(id) } catch(e: Exception) { rejected(id,e);null }
+    }
+
 /** Physical identity is independent of the Camera2 entry used to reach it. */
 data class LensRoute(val openId: String, val lensId: String, val physicalId: String? = null) {
     val key get() = "$openId/${physicalId.orEmpty()}"
@@ -41,7 +47,9 @@ class LensCatalog(manager: CameraManager) {
     val defaultLensId: String?
     init {
         val public=runCatching {manager.cameraIdList.toList()}.onFailure {rejected["camera-service"]=it.message ?: tr(Texts.string.camera_service_is_temporarily_unavailable)}.getOrDefault(emptyList())
-        val characteristics=public.mapNotNull { id->runCatching {id to manager.getCameraCharacteristics(id)}.onFailure {rejected[id]=it.message ?: tr(Texts.string.camera_service_is_temporarily_unavailable)}.getOrNull() }.toMap()
+        val characteristics=readCameraEntries(public,manager::getCameraCharacteristics) {id,e->
+            rejected[id]=e.message ?: tr(Texts.string.camera_service_is_temporarily_unavailable)
+        }.toMap()
         val members=characteristics.values.flatMap { it.physicalCameraIds }.toSet()
         val routes=mutableListOf<RawLens>()
         fun add(route: LensRoute) {
@@ -55,7 +63,7 @@ class LensCatalog(manager: CameraManager) {
                 require(RawLimits.supports(active.width(),active.height())) {tr(Texts.string.effective_raw_exceeds_60_megapixels)}
                 require(c[C.SENSOR_BLACK_LEVEL_PATTERN]!=null && c[C.SENSOR_INFO_WHITE_LEVEL]!=null && c[C.SENSOR_COLOR_TRANSFORM1]!=null) {tr(Texts.string.missing_raw_calibration)}
                 val sizes=c[C.SCALER_STREAM_CONFIGURATION_MAP]?.getOutputSizes(ImageFormat.RAW_SENSOR).orEmpty()
-                require(sizes.filter {it.width.toLong()*it.height<=32_000_000}.any { (it.width==pixels.width && it.height==pixels.height) ||
+                require(sizes.filter {RawLimits.supports(it.width,it.height)}.any { (it.width==pixels.width && it.height==pixels.height) ||
                     (it.width==active.width() && it.height==active.height() && active.left%2==0 && active.top%2==0) }) {tr(Texts.string.unsupported_raw_coordinates)}
                 val optics=CameraOptics.read(c)
                 routes+=RawLens(route,optics?.equivalentMm,optics)
