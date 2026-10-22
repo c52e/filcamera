@@ -1,4 +1,7 @@
 #include "tracking.h"
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
 #include <vulkan/vulkan.h>
 namespace {
 void lab_compute_barrier(VkCommandBuffer cmd) {
@@ -300,6 +303,8 @@ struct Ctx {
     // 10-19 GB/s against a part that should manage several times more. Only the
     // real plane (host writes the source, host reads the output) stays mapped.
     Kernel fftK;                          // pipeline objects + the mapped buffers
+    struct SpectrumCache {ResidentBuf buffer;std::vector<float> key;};
+    std::array<SpectrumCache,2> spectra{}; // pair/single slots, at most 256 MiB total
     std::array<ResidentBuf, 3> fftWork{};  // A, B, twiddles+kernel spectrum
 
     // The resident frame (#220): a device-local ping-pong pair carrying the
@@ -665,6 +670,7 @@ struct Ctx {
         destroyKernel(glareK);
         destroyKernel(fftK);
         for (ResidentBuf& b : fftWork) destroyResidentBuf(b);
+        for(auto& entry:spectra) {destroyResidentBuf(entry.buffer);entry.key.clear();}
         destroyFrame();
         destroyKernel(filmK);
     }
@@ -3072,6 +3078,30 @@ bool fft_convolve(const FftConvolveRequest& r, double* out,
         realBytes > limits.maxStorageBufferRange)
         return give_up("buffer-too-large");
 
+    // Retain the exact shader input (f32 kernels) alongside its device spectrum.
+    auto& spectrum=c.spectra[pair?1:0];
+    const auto& other=c.spectra[pair?0:1];
+    const bool cacheSpectrum=!std::getenv("FILMCAMERA_DIFFUSION_CACHE_OFF") &&
+        std::max(twBytes,spectrum.buffer.cap)+other.buffer.cap<=256ull*1024*1024;
+    std::vector<float> spectrumKey;
+    bool spectrumHit=false;
+    if(cacheSpectrum) {
+        // The cached table replaces the uncached scratch table; do not retain both.
+        c.destroyResidentBuf(c.fftWork[2]);
+        spectrumKey={float(tnx),float(tny),float(ks),float(fc_gpu_workgroup()),float(fc_gpu_optimizations())};
+        spectrumKey.reserve(5+kernCount*planes);
+        for(size_t i=0;i<kernCount;++i)spectrumKey.push_back(float(r.kern[i]));
+        if(pair)for(size_t i=0;i<kernCount;++i)spectrumKey.push_back(float(r.kern2[i]));
+        spectrumHit=spectrum.buffer.buf && spectrum.key==spectrumKey;
+        if(!spectrumHit)spectrum.key.clear();
+    }
+    // Restore ownership on every exit, including exceptions. Device cleanup owns both slots.
+    struct SpectrumLease {
+        ResidentBuf& work;ResidentBuf& cached;bool active;
+        SpectrumLease(ResidentBuf& w,ResidentBuf& c,bool a):work(w),cached(c),active(a){if(active)std::swap(work,cached);}
+        ~SpectrumLease(){if(active)std::swap(work,cached);}
+    } spectrumLease(c.fftWork[2],spectrum.buffer,cacheSpectrum);
+
     uint32_t dispatches = 0;
     bool grid_ok = true;
 
@@ -3117,7 +3147,7 @@ bool fft_convolve(const FftConvolveRequest& r, double* out,
         // running on exactly the memory it meant to avoid, silently.
         d.scratch_host_visible =
             (c.fftWork[0].memoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
-        if (!hadA || !hadB || !hadTw || !hadReal) {
+        { // Cached tables can change handles without changing capacities.
             VkBuffer bufs[4] = {c.fftWork[0].buf, c.fftWork[1].buf,
                                 c.fftWork[2].buf, s.cmfB.buf};
             VkDeviceSize caps[4] = {c.fftWork[0].cap, c.fftWork[1].cap,
@@ -3369,13 +3399,21 @@ bool fft_convolve(const FftConvolveRequest& r, double* out,
             });
         };
 
-        gpu_ok = transform_kernel(kernOffset, /*first=*/true);
-        if (gpu_ok && pair) {
+        const auto kernelStart=std::chrono::steady_clock::now();
+        gpu_ok = spectrumHit || transform_kernel(kernOffset, /*first=*/true);
+        if (gpu_ok && pair && !spectrumHit) {
             for (size_t i = 0; i < kernCount; ++i)
                 real[kernBase + i] = static_cast<float>(r.kern2[i]);
             gpu_ok = transform_kernel(kernOffset2, /*first=*/false);
         }
 
+        if(cacheSpectrum && gpu_ok) spectrum.key=std::move(spectrumKey);
+        if (const char* debug=std::getenv("SPK_GPU_DEBUG"); debug && debug[0]=='1') {
+#if defined(__ANDROID__)
+            __android_log_print(ANDROID_LOG_INFO,"DiffusionPerf","kernel_fft %.3f ms pair=%d",
+                std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-kernelStart).count(),int(pair));
+#endif
+        }
         // Pass 2..N: one overlap-save tile per submission.
         const float scale = static_cast<float>(
             1.0 / (static_cast<double>(tnx) * static_cast<double>(tny)));

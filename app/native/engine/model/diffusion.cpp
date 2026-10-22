@@ -15,6 +15,7 @@
 #include "runtime.h"
 
 #if defined(__ANDROID__)
+#include <android/log.h>
 #include <sys/system_properties.h>   // debug.spektra.fftmax / .fft (tuning_knob)
 #endif
 
@@ -895,7 +896,11 @@ struct DiffusionClock {
     }
     void note(const char* what, double ms) const {
         if (!on) return;
+#if defined(__ANDROID__)
+        __android_log_print(ANDROID_LOG_INFO, "DiffusionPerf", "diffusion_%s %.3f ms", what, ms);
+#else
         std::fprintf(stderr, "[gpu-debug] diffusion_%s %.1f ms\n", what, ms);
+#endif
     }
 };
 
@@ -1001,12 +1006,29 @@ void apply_diffusion_filter_um(double* raw, int w, int h,
         return total;
     };
 
+    const int reduction=allow_gpu_fft && gpu::frame_active(w,h) &&
+        (fc_gpu_optimizations()&FC_DIFFUSION_MULTISCALE) && w>=128 && h>=128 &&
+        w%2==0 && h%2==0 && radius>=16 ? 2 : 1;
+    // Exact derived inputs, including expanded family controls; no rounded keys.
+    std::vector<double> kernelKey={double(radius),double(reduction),cfg.w_c,cfg.w_b,cfg.w_h,
+        double(bool(fc_gpu_optimizations()&FC_DIFFUSION_RADIAL_TABLE))};
+    auto appendKey=[&](const std::vector<double>& v){kernelKey.push_back(double(v.size()));kernelKey.insert(kernelKey.end(),v.begin(),v.end());};
+    appendKey(core_lambdas);appendKey(core_weights);appendKey(bloom_lambdas);appendKey(bloom_weights);
+    appendKey(halo_lambdas);for(const auto& v:halo_per_ch) appendKey(v);
+    struct KernelCache {std::vector<double> key;std::vector<std::vector<double>> psf,core;int fftKs=0;};
+    // The worker owns this cache. A single entry bounds retained CPU data to 64 MiB.
+    static thread_local KernelCache cached;
+    const bool cacheEnabled=!std::getenv("FILMCAMERA_DIFFUSION_CACHE_OFF");
+    const bool cacheHit=cacheEnabled && cached.key==kernelKey;
+    KernelCache temporary;
+    auto& result=cacheHit?cached:temporary;
+    auto& psf=result.psf;auto& core=result.core;auto& fftKs=result.fftKs;
+    if(!cacheHit) {
     // Build the per-channel PSF on the (ks x ks) grid. r is measured from the
     // grid centre (cy, cx) = (ks//2, ks//2) (same as np.ogrid + the integer
     // centre in diffusion_filter_psf). Then sum-normalise each channel.
     const int cy = ks / 2, cx = ks / 2;
-    std::vector<std::vector<double>> psf(3, std::vector<double>(
-                                                static_cast<size_t>(ks) * ks));
+    psf.assign(3, std::vector<double>(static_cast<size_t>(ks) * ks));
     double psf_sum[3] = {0.0, 0.0, 0.0};
     // The PSF is radial. Sample its original exponential sums in double,
     // then interpolate values, not radii/parameters. Keep the central narrow
@@ -1076,11 +1098,8 @@ void apply_diffusion_filter_um(double* raw, int w, int h,
     // Split the already normalized original kernel. The short residual and
     // broad component share ONE normalization; neither is independently scaled.
     // Tent splatting onto the reduced kernel conserves each channel's mass.
-    const int reduction=allow_gpu_fft && gpu::frame_active(w,h) &&
-        (fc_gpu_optimizations()&FC_DIFFUSION_MULTISCALE) && w>=128 && h>=128 &&
-        w%2==0 && h%2==0 && radius>=16 ? 2 : 1;
-    int fftKs=ks;
-    std::vector<std::vector<double>> core(3,std::vector<double>(81,0.0));
+    fftKs=ks;
+    core.assign(3,std::vector<double>(81,0.0));
     if(reduction>1) {
         const int lowRadius=(radius+reduction-1)/reduction+1;
         fftKs=2*lowRadius+1;
@@ -1101,6 +1120,18 @@ void apply_diffusion_filter_um(double* raw, int w, int h,
             }
         }
         psf.swap(broad);
+    }
+    clk.note("kernel_split", clk.lap());
+
+    }
+    if(cacheHit) clk.note("psf_cache_hit",clk.lap());
+    else if(cacheEnabled) {
+        size_t bytes=0;for(const auto& v:psf)bytes+=v.size()*sizeof(double);
+        for(const auto& v:core)bytes+=v.size()*sizeof(double);
+        // Keep local references valid for this render; publish a copy only on misses.
+        if(bytes<=64u*1024*1024) {
+            try {temporary.key=kernelKey;cached=temporary;} catch(const std::bad_alloc&) {cached={};}
+        } else cached={};
     }
 
     // Reflect-pad the image (numpy mode='reflect': mirror WITHOUT edge repeat),
