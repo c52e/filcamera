@@ -113,7 +113,7 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
             } catch(e: OutOfMemoryError) {error=tr(Texts.string.out_of_memory_original_and_previous_result_retained)}
             catch(e: Exception) {error=e.message}
             finally {file.delete();input.close();FilmEngine.close()}
-            main.post {if(result!=null) saved();if(active && generation==gen) {mutable.value=mutable.value.copy(busy=false,saving=false,message=error ?: tr(Texts.string.copy_saved));done(result,error)}}
+            main.post {if(result!=null) saved();if(active && generation==gen) {mutable.value=mutable.value.copy(busy=false,saving=false,message=error.orEmpty());done(result,error)}}
         }
     }
 

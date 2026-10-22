@@ -35,9 +35,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -49,9 +52,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -119,12 +124,23 @@ class CameraActivity: ComponentActivity() {
         onDispose {owner.lifecycle.removeObserver(observer)}
     }
     LaunchedEffect(Unit) {if(!permission && !asked) {asked=true;prefs.edit().putBoolean("cameraAsked",true).apply();permissionRequest.launch(Manifest.permission.CAMERA)}}
-    fun saveCopy() {model.editor.save {result,error->if(result!=null) {versionId=result.id;model.refresh();model.editor.close();page="photo"};model.message(error ?: tr(Texts.string.copy_saved))}}
+    fun saveCopy() {model.editor.save {result,error->if(result!=null) {versionId=result.id;model.refresh();model.editor.close();page="photo"};model.message(error.orEmpty())}}
+    val accessibility=LocalAccessibilityManager.current
+    LaunchedEffect(ui.messageId,ui.message,ui.messagePersistent,owner,accessibility) {
+        if(ui.message.isNotBlank() && !ui.messagePersistent) owner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val timeout=accessibility?.calculateRecommendedTimeoutMillis(3000L,containsIcons=false,containsText=true,containsControls=false) ?: 3000L
+            delay(timeout)
+            model.dismissMessage(ui.messageId)
+        }
+    }
     @Composable fun notice() {
-        if(ui.message.isNotBlank()) Row(Modifier.widthIn(max=420.dp)
-            .background(Color(0xff343027)).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
-            Text(ui.message,Modifier.weight(1f),fontSize=12.sp)
-            TextButton(onClick={model.message("")}) {Text(tr(Texts.string.ok))}
+        if(ui.message.isNotBlank()) Surface(
+            modifier=Modifier.padding(horizontal=12.dp).widthIn(max=420.dp).semantics {liveRegion=LiveRegionMode.Polite},
+            shape=RoundedCornerShape(12.dp),color=Color(0xff343027),shadowElevation=6.dp) {
+            Row(Modifier.padding(start=16.dp,end=8.dp),verticalAlignment=Alignment.CenterVertically) {
+                Text(ui.message,Modifier.weight(1f).heightIn(max=96.dp).verticalScroll(remember(ui.messageId) {ScrollState(0)}).padding(vertical=12.dp),fontSize=13.sp)
+                if(ui.messagePersistent) TextButton(onClick={model.dismissMessage(ui.messageId)}) {Text(tr(Texts.string.close))}
+            }
         }
     }
     val landscape=LocalConfiguration.current.screenWidthDp>LocalConfiguration.current.screenHeightDp
@@ -188,9 +204,10 @@ class CameraActivity: ComponentActivity() {
 
                 }
             }
-            if(page!="camera" && page!="edit") notice()
         }
         if(ui.working) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+        // An overlay never participates in measuring the photo, grid or controls.
+        if(page!="camera" && page!="edit") Box(Modifier.align(Alignment.TopCenter).padding(top=56.dp)) {notice()}
 
         }
     }

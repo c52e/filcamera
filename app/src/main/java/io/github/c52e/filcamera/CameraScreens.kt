@@ -112,7 +112,7 @@ import java.io.File
                 TextButton(onClick={context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+context.packageName)))}) {Text(tr(Texts.string.open_permission_settings))}
             }
             if(camera.processing) Text(tr(Texts.string.capture_complete_can_move),color=Accent,fontSize=16.sp)
-            Box(Modifier.align(Alignment.BottomStart)) {notice()}
+            Box(Modifier.align(Alignment.TopCenter).padding(top=56.dp)) {notice()}
             val message=when {camera.switching->tr(Texts.string.switching_lens_2);camera.whiteBalance.error.isNotBlank()->camera.whiteBalance.error;camera.whiteBalance.pending->tr(Texts.string.updating_white_balance);camera.updating->tr(Texts.string.updating_preview);camera.framingPending->tr(Texts.string.adjusting_framing);else->camera.message}
             if(message.isNotBlank()) Text(message,Modifier.align(Alignment.TopStart).padding(8.dp)
                 .background(Color.Black.copy(alpha=.65f),RoundedCornerShape(10.dp)).padding(8.dp),fontSize=12.sp,color=Accent,maxLines=3)
@@ -158,7 +158,10 @@ import java.io.File
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val panelWidth=if(expanded) (maxWidth*.32f).coerceIn(240.dp,288.dp) else 56.dp
         ImageWorkspace(landscape,panelWidth,if(expanded) minOf(280.dp,maxOf(192.dp,maxHeight*.32f),maxHeight*.55f) else 0.dp,
-            image={Box(Modifier.fillMaxSize()) {ZoomPhoto(edit.file ?: fallback,Modifier.fillMaxSize(),false,false,zoomSession) {};Box(Modifier.align(Alignment.BottomStart)) {notice()}}},
+            image={Box(Modifier.fillMaxSize()) {
+                ZoomPhoto(edit.file ?: fallback,Modifier.fillMaxSize(),false,false,zoomSession) {}
+                Box(Modifier.align(Alignment.TopCenter).padding(top=8.dp)) {notice()}
+            }},
             header={if(!landscape) Row(Modifier.fillMaxWidth().padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
                 backButton();Text(tr(Texts.string.darkroom),fontSize=18.sp);toggleButton();saveButton()
             }},tools={
