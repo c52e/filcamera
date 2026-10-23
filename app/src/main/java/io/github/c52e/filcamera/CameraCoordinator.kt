@@ -84,11 +84,14 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
                 try {
                     val dir=PairCaptureStore(context).finish(item.id,item.snapshot,matchedPreview,frame,item.recipe,item.timing,item.metadata,item.framing)
                     val photo=item.timing.stage("catalogUpdate") {repository.scan().first {it.id==dir.name}}
-                    val warning=try {item.timing.stage("albumSave") {repository.publish(checkNotNull(photo.latest))};null} catch(e: Exception) {tr(Texts.string.photo_retained_gallery_save_failed_retry_from_the_photo_page)}
+                    val warning=try {item.timing.stage("albumSave") {repository.publish(checkNotNull(photo.latest))};null} catch(e: Exception) {LocalDiagnostics.failure("SAVE-002","gallery-save",tr(Texts.string.photo_retained_gallery_save_failed_retry_from_the_photo_page),e)}
                     val delivered=JSONObject(photo.record.readText()).put("deliveryTiming",item.timing.json()).put("albumStatus",warning ?: "saved")
                     PhotoRepository.atomic(photo.record,delivered)
                     update {it.copy(completed=dir.name,message=warning ?: tr(Texts.string.saved_1f_s).format(item.timing.json().getDouble("totalMs")/1000))}
-                } catch(e: Exception) {update {it.copy(message=tr(Texts.string.development_failed_saved_dng_retained_value, e.message))}}
+                } catch(e: Exception) {
+                    val diagnostic=LocalDiagnostics.failure("DEV-001","capture-development",tr(Texts.string.development_failed_saved_dng_retained_value, e.message),e)
+                    update {it.copy(message=diagnostic)}
+                }
                 finally {frame.close();saving=false;controllerFinished(tr(Texts.string.capture_complete));main.post {changed();if(active && needsLut) scheduleLut()}}
             }
         }
@@ -132,6 +135,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         mutable.value.options.firstOrNull {it.targetMm==target && (target!=null || it.lens?.route==selected?.lens?.route)}?.let {selectFocal(it.id)}
     }
     fun selectFocal(id: String) {
+        LocalDiagnostics.event("CAM.selectFocal","option=$id")
         if(mutable.value.busy || saving) return
         routeFailures.resetAttempts()
         val option=mutable.value.options.firstOrNull {it.id==id && it.lens!=null} ?: return
@@ -152,7 +156,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     private fun attachTarget(next: FilmPreviewView,serial: Long,texture: android.graphics.SurfaceTexture,surface: android.view.Surface,release: ()->Unit) {
         val route=selected?.lens?.route
         if(!active || next!==view || serial!=switchSerial || route==null) {
-            release();if(active && route==null) mutable.value=mutable.value.copy(framingPending=false,switching=false,message=tr(Texts.string.no_supported_rear_raw_lens_found_you_can_still_browse_and_edit_ph))
+            release();if(active && route==null) mutable.value=mutable.value.copy(framingPending=false,switching=false,message=LocalDiagnostics.failure("CAM-010","discovery",tr(Texts.string.no_supported_rear_raw_lens_found_you_can_still_browse_and_edit_ph),details="rejected=${catalog.rejected}"))
             return
         }
         mutable.value=mutable.value.copy(sourceStarts=mutable.value.sourceStarts+1)
@@ -164,7 +168,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
                 mutable.value=mutable.value.copy(info=info,ev=info.ev);refreshFraming()
             }}
         }
-        main.postDelayed({if(active && serial==switchSerial && !frames) switchFailed(route,tr(Texts.string.lens_startup_timed_out_please_retry))},10000)
+        main.postDelayed({if(active && serial==switchSerial && !frames) switchFailed(route,LocalDiagnostics.failure("CAM-022","startup-timeout",tr(Texts.string.lens_startup_timed_out_please_retry),details="attempt=$serial route=$route"))},10000)
     }
     private fun switchFailed(route: LensRoute,message: String) {
         val failed=selected?.takeIf {it.lens?.route==route} ?: return
@@ -172,12 +176,14 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         val fallback=routeFailures.fallback(failed,confirmed,catalog.entries)
         switchError=message+(if(fallback!=null) tr(Texts.string.available_lens_restored) else "")
         mutable.value=mutable.value.copy(ready=false,switching=false,framingPending=false,message=switchError)
+        LocalDiagnostics.event("CAM.fallback","failed=$route fallback=${fallback?.lens?.route}")
         if(fallback!=null) {
             selected=fallback;mutable.value=mutable.value.copy(selectedFocal=fallback.id,targetMm=fallback.targetMm);switchLens()
         }
     }
     private fun controllerFinished(message: String): Unit {controller.processingFinished(message)}
     fun createPreview(uiContext: Context,rotation: Int): FilmPreviewView {
+        LocalDiagnostics.event("CAM.createPreview","rotation=$rotation")
         stop()
         routeFailures.resetAttempts()
         // Permission/service failures during initial discovery must not require clearing app data.
@@ -202,12 +208,13 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
             } else release()
         }},
         {metrics->main.post {if(active && current==generation) mutable.value=mutable.value.copy(diagnostics=metrics+" · "+effect.lutSource+" · "+effect.lutKey)}},
-        {error->update {it.copy(message=error,ready=false,framingPending=false,switching=false)}},effect)
+        {error->val diagnostic=LocalDiagnostics.failure("GPU-001","preview",error);update {it.copy(message=diagnostic,ready=false,framingPending=false,switching=false)}},effect)
         next.displayRotationDegrees=rotation;next.setProcessingPaused(saving);view=next;return next
     }
     fun stop(expected: FilmPreviewView?=null) {
         if(expected!=null && view!==expected) return
         clearTapFocus()
+        LocalDiagnostics.event("CAM.stop","attempt=$switchSerial saving=$saving")
         active=false;generation++;switchSerial++;main.removeCallbacks(bake)
         if(request>0) FilmEngine.cancelBake(request);request=0;bakingId=0
         synchronized(lock) {shot=null;previewResults.clear()};controller.stop();view?.cancelSnapshot();view?.onPause();view=null
@@ -252,16 +259,17 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
                 if(!current()) {finish();return@execute}
                 view?.queueEvent {
                     try {if(current()) effect.replaceLut(table.lut);finish()}
-                    catch(e: Exception) {finish(tr(Texts.string.preview_not_updated_capture_uses_the_selected_recipe_value, e.message))}
+                    catch(e: Exception) {finish(LocalDiagnostics.failure("GPU-002","lut-upload",tr(Texts.string.preview_not_updated_capture_uses_the_selected_recipe_value, e.message),e))}
                 } ?: finish()
-            } catch(e: OutOfMemoryError) {finish(if(current()) tr(Texts.string.out_of_memory) else null)}
-            catch(e: Exception) {finish(if(current()) tr(Texts.string.preview_not_updated_keeping_current_view_value, e.message) else null)}
+            } catch(e: OutOfMemoryError) {finish(if(current()) LocalDiagnostics.failure("GPU-003","lut-memory",tr(Texts.string.out_of_memory),e) else null)}
+            catch(e: Exception) {finish(if(current()) LocalDiagnostics.failure("GPU-004","lut-build",tr(Texts.string.preview_not_updated_keeping_current_view_value, e.message),e) else null)}
         }
     }
     fun capture(rotation: Int) {
         val s=mutable.value;if(!active || !s.ready || s.switching || s.busy || s.updating || s.framingPending || s.whiteBalance.pending) return
-        if(android.os.StatFs(context.filesDir.path).availableBytes<300L*1024*1024) {mutable.value=s.copy(message=tr(Texts.string.low_storage_keep_at_least_300_mb_free));return}
+        if(android.os.StatFs(context.filesDir.path).availableBytes<300L*1024*1024) {mutable.value=s.copy(message=LocalDiagnostics.failure("SAVE-003","storage-check",tr(Texts.string.low_storage_keep_at_least_300_mb_free)));return}
         val frozen=recipe;mutable.value=s.copy(busy=true,ready=false,message=tr(Texts.string.capturing))
+        LocalDiagnostics.event("SHOT.start","route=${s.info?.route} rotation=$rotation")
         val timing=CaptureTiming {stage->update {it.copy(stage=stage,message=when(stage) {"rawDevelop"->tr(Texts.string.developing);"nativeCall"->tr(Texts.string.rendering_film_photo);"albumSave"->tr(Texts.string.saving_to_gallery);else->tr(Texts.string.processing_photo)})}}
         val id="pair_"+UUID.randomUUID()
         fun submit(snapshot: PreviewSnapshot?,metadata: String) {

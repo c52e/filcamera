@@ -243,7 +243,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         wbCamera?.let {wbRejected.add(it);whiteBalances[it]=WhiteBalance()}
         wb=WhiteBalance();wbRevision++;wbPending=true;wbError=reason+tr(Texts.string.restoring_auto_white_balance)
         reportWb()
-        try {repeat();armWbTimeout()} catch(e: Exception) {fail(tr(Texts.string.could_not_restore_auto_white_balance_value, e.message))}
+        try {repeat();armWbTimeout()} catch(e: Exception) {fail(tr(Texts.string.could_not_restore_auto_white_balance_value, e.message),cause=e)}
     }
     private fun armWbTimeout() {
         wbTimeout?.let(handler::removeCallbacks)
@@ -289,15 +289,22 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             stopInternal()
             val gen = generation
             surface = target; releaseTarget = release; route=selectedRoute;this.requestTag=requestTag
+            var phase="characteristics"
+            LocalDiagnostics.event("CAM.start","attempt=$requestTag $selectedRoute")
+            LocalDiagnostics.event("CAM.inventory",runCatching {manager.cameraIdList.joinToString()}.getOrElse {it.javaClass.simpleName})
             try {
+                LocalDiagnostics.event("CAM.characteristics","lensId=${selectedRoute.lensId} openId=${selectedRoute.openId}")
                 chars=manager.getCameraCharacteristics(selectedRoute.lensId)
                 logicalChars=if(selectedRoute.openId==selectedRoute.lensId) chars else manager.getCameraCharacteristics(selectedRoute.openId)
                 physicalKeys=if(selectedRoute.physicalId!=null) logicalChars?.availablePhysicalCameraRequestKeys?.toSet() ?: emptySet() else emptySet()
+                phase="configure"
                 configure(selectedRoute,requireNotNull(chars),texture,configured)
+                phase="open"
+                LocalDiagnostics.event("CAM.open","attempt=$requestTag id=${selectedRoute.openId}")
                 open(selectedRoute.openId,gen)
             } catch (e: Exception) {
                 android.util.Log.e("Camera2","Could not start route $selectedRoute",e)
-                fail(tr(Texts.string.could_not_open_camera_value, e.message))
+                fail(tr(Texts.string.could_not_open_camera_value, e.message),when(phase) {"characteristics"->"CAM-012";"configure"->"CAM-013";else->"CAM-014"},e,phase)
             }
         }
     }
@@ -345,7 +352,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             try {
                 val lease = next.acquire() ?: return@setOnImageAvailableListener
                 if (next !== owner || !pending || !shooting) lease.close() else pairer.image(lease.image.timestamp,lease)
-            } catch (e: Exception) { abortCapture(tr(Texts.string.could_not_read_photo_value, e.message)) }
+            } catch (e: Exception) { abortCapture(tr(Texts.string.could_not_read_photo_value, e.message),e) }
         },handler)
         configured(info!!)
     }
@@ -359,15 +366,16 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             private var closed = false
             override fun onOpened(camera: CameraDevice) {
                 if (gen != generation || !alive) { camera.close(); return }
+                LocalDiagnostics.event("CAM.opened","attempt=$requestTag id=${camera.id}")
                 device = camera
                 createSession(gen)
             }
-            override fun onDisconnected(camera: CameraDevice) { camera.close(); if (gen == generation) fail(tr(Texts.string.camera_disconnected_please_retry)) }
+            override fun onDisconnected(camera: CameraDevice) { camera.close(); if (gen == generation) fail(tr(Texts.string.camera_disconnected_please_retry),"CAM-030",stage="disconnected") }
             override fun onError(camera: CameraDevice, error: Int) {
                 camera.close()
                 if (gen != generation) return
                 android.util.Log.e("Camera2","Device error $error on route $route; previewStarted=${latestResult!=null}")
-                fail(tr(Texts.string.camera2_error_value_please_retry, error))
+                fail(tr(Texts.string.camera2_error_value_please_retry, error),"CAM-031",stage="device-error-$error")
             }
             override fun onClosed(camera: CameraDevice) {
                 if (!closed) { closed = true; targetRelease?.invoke(); openRequests--; maybeQuit() }
@@ -386,19 +394,20 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
                 java.util.concurrent.Executor { handler.post(it) },object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(s: CameraCaptureSession) {
                     if (gen != generation) { s.close(); return }
+                    LocalDiagnostics.event("CAM.sessionReady","attempt=$requestTag route=$route")
                     session = s
                     try { repeat();if(wbPending) armWbTimeout(); emit(tr(Texts.string.raw_gpu_preview)) }
-                    catch (e: Exception) { fail(tr(Texts.string.preview_failed_value, e.message)) }
+                    catch (e: Exception) { fail(tr(Texts.string.preview_failed_value, e.message),"CAM-021",e,"preview-request") }
                 }
                 override fun onConfigureFailed(s: CameraCaptureSession) {
                     s.close()
                     if (gen != generation) return
-                    fail(tr(Texts.string.device_rejected_this_lens_s_preview_raw_stream_combination))
+                    fail(tr(Texts.string.device_rejected_this_lens_s_preview_raw_stream_combination),"CAM-020",stage="session-configure")
                 }
             }))
         } catch (e: Exception) {
             if(gen!=generation) return
-            fail(tr(Texts.string.could_not_create_raw_session_value, e.message))
+            fail(tr(Texts.string.could_not_create_raw_session_value, e.message),"CAM-020",e,"session-create")
         }
     }
 
@@ -479,7 +488,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
                 if(toneMismatches>=8) {
                     toneRejected=true
                     android.util.Log.w("Camera2","HAL did not confirm standard preview curve; retaining ISP preview")
-                    try {repeat()} catch(e: Exception) {fail(tr(Texts.string.could_not_restore_preview_value, e.message));return}
+                    try {repeat()} catch(e: Exception) {fail(tr(Texts.string.could_not_restore_preview_value, e.message),cause=e);return}
                 }
             }
             val firstResult=latestResult==null
@@ -560,7 +569,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         val c = info ?: return@post
         if (pending) return@post
         ev = value.coerceIn(c.evMin,c.evMax)
-        try { if (session != null) repeat() } catch (e: Exception) { fail(tr(Texts.string.could_not_set_exposure_value, e.message)) }
+        try { if (session != null) repeat() } catch (e: Exception) { fail(tr(Texts.string.could_not_set_exposure_value, e.message),cause=e) }
     } }
     fun capture(film: FilmRecipe, displayDegrees: Int) { handler.post {
         if (session == null || pending || processing || wbPending) return@post
@@ -581,7 +590,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             session!!.capture(trigger.build(),previewCallback,handler)
             repeat()
             focusTimeout = Runnable { if (pending && !shooting) takeStill() }.also { handler.postDelayed(it,1800) }
-        } catch (e: Exception) { abortCapture(tr(Texts.string.shutter_failed_value, e.message)) }
+        } catch (e: Exception) { abortCapture(tr(Texts.string.shutter_failed_value, e.message),e) }
     } }
     private fun takeStill() {
         if (!pending || shooting) return
@@ -607,13 +616,14 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
                 override fun onCaptureFailed(s: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) { if (s === session) abortCapture(tr(Texts.string.capture_failed_value, failure.reason)) }
                 override fun onCaptureBufferLost(s: CameraCaptureSession, request: CaptureRequest, target: Surface, frameNumber: Long) { if (s === session) abortCapture(tr(Texts.string.photo_buffer_was_lost)) }
             },handler)
-        } catch (e: Exception) { abortCapture(tr(Texts.string.capture_failed_value_2, e.message)) }
+        } catch (e: Exception) { abortCapture(tr(Texts.string.capture_failed_value_2, e.message),e) }
     }
     private fun unlock() {restoreFocus()}
-    private fun abortCapture(message: String) {
+    private fun abortCapture(message: String, cause: Throwable?=null) {
+        val diagnostic=LocalDiagnostics.failure("CAM-040","capture",message,cause,"attempt=$requestTag route=$route")
         pending = false; shooting = false
         focusTimeout?.let(handler::removeCallbacks); captureTimeout?.let(handler::removeCallbacks)
-        pairer.clear(); unlock(); emit(message)
+        pairer.clear(); unlock(); emit(diagnostic)
     }
     fun processingFinished(message: String) { handler.post { processing = false; restoreFocus(); emit(message) } }
     fun stop() { handler.post { stopInternal(); emit(tr(Texts.string.camera_paused)) } }
@@ -633,7 +643,11 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         releaseTarget = null; surface = null
         owner?.retire(); owner = null
     }
-    private fun fail(message: String) { val failed=route;stopInternal();state(CameraState(false,processing,message,info,failed,requestTag,processing)) }
+    private fun fail(message: String,code: String="CAM-099",cause: Throwable?=null,stage: String="camera-control") {
+        val failed=route
+        val diagnostic=LocalDiagnostics.failure(code,stage,message,cause,"attempt=$requestTag open=${route?.openId} lens=${route?.lensId} physical=${route?.physicalId ?: "-"} preview=${latestResult!=null}")
+        stopInternal();state(CameraState(false,processing,diagnostic,info,failed,requestTag,processing))
+    }
     private fun maybeQuit() { if (!alive && openRequests == 0) thread.quitSafely() }
     override fun close() { handler.post { alive = false; stopInternal(); maybeQuit() } }
 }

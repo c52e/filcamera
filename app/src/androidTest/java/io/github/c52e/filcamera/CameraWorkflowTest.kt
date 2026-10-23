@@ -39,8 +39,8 @@ class CameraWorkflowTest {
         val report=JSONObject()
         lateinit var model: CameraViewModel
         ui.activityRule.scenario.onActivity {model=ViewModelProvider(it)[CameraViewModel::class.java]}
-        val locales=if(android.os.Build.VERSION.SDK_INT>=33) app.getSystemService(LocaleManager::class.java) else null
-        val previousLocales=locales?.applicationLocales
+        val supportsLocales=android.os.Build.VERSION.SDK_INT>=33
+        val previousLocales=if(supportsLocales) Api33Locales.read(app) else null
         val previousOrientation=ui.activity.requestedOrientation
         fun stage(name: String) {File(app.cacheDir,"workflow-stage.txt").writeText(name)}
         fun ready()=ui.waitUntil(90000) {model.camera.state.value.let {it.ready && !it.busy && !it.updating && !it.framingPending && !it.switching}}
@@ -58,10 +58,10 @@ class CameraWorkflowTest {
             val originalHash=original?.let {PairCaptureStore.hash(it)}
             val recipe=model.state.value.recipe.hash
             report.put("existingPhotos",existing.size)
-            for(language in if(locales!=null) listOf("en","zh-CN") else listOf("system")) {
+            for(language in if(supportsLocales) listOf("en","zh-CN") else listOf("system")) {
                 stage("locale-$language")
-                if(locales!=null) {
-                    ui.runOnIdle {locales.applicationLocales=LocaleList.forLanguageTags(language)}
+                if(supportsLocales) {
+                    ui.runOnIdle {Api33Locales.write(app,LocaleList.forLanguageTags(language))}
                     ui.waitUntil(15000) {ui.activity.resources.configuration.locales[0].language==language.substringBefore('-')}
                     ready()
                 }
@@ -122,8 +122,15 @@ class CameraWorkflowTest {
             report.put("lastStage",File(app.cacheDir,"workflow-stage.txt").readText())
             File(app.cacheDir,"workflow-report.json").writeText(report.toString(2))
             ui.activityRule.scenario.onActivity {it.requestedOrientation=previousOrientation}
-            if(locales!=null && previousLocales!=null) ui.runOnIdle {locales.applicationLocales=previousLocales}
+            if(previousLocales!=null) ui.runOnIdle {Api33Locales.write(app,previousLocales)}
         }
     }
 }
 
+
+// Keep API 33 types out of JUnit-reflected methods and synthetic lambda signatures on API 29–32.
+@androidx.annotation.RequiresApi(33)
+private object Api33Locales {
+    fun read(context: android.content.Context): LocaleList = context.getSystemService(LocaleManager::class.java).applicationLocales
+    fun write(context: android.content.Context,value: LocaleList) {context.getSystemService(LocaleManager::class.java).applicationLocales=value}
+}

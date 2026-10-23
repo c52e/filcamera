@@ -50,6 +50,7 @@ class LensCatalog(manager: CameraManager) {
         val characteristics=readCameraEntries(public,manager::getCameraCharacteristics) {id,e->
             rejected[id]=e.message ?: tr(Texts.string.camera_service_is_temporarily_unavailable)
         }.toMap()
+        LocalDiagnostics.event("CAM.discovery","public=$public rejected=$rejected")
         val members=characteristics.values.flatMap { it.physicalCameraIds }.toSet()
         val routes=mutableListOf<RawLens>()
         fun add(route: LensRoute) {
@@ -79,5 +80,6 @@ class LensCatalog(manager: CameraManager) {
         defaultLensId=routes.firstOrNull { it.route.lensId==old }?.route?.lensId ?: routes.filter { it.route.openId==old }
             .minByOrNull { abs((it.equivalentMm ?: Double.POSITIVE_INFINITY)-(oldOptics?.equivalentMm ?: 0.0)) }?.route?.lensId ?: routes.firstOrNull()?.route?.lensId
         entries=routes
+        LocalDiagnostics.event("CAM.routes","routes=${routes.map {it.route}} default=$defaultLensId rejected=$rejected")
     }
 }

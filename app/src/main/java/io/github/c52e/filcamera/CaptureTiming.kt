@@ -8,15 +8,22 @@ import org.json.JSONObject
 
 /** Monotonic elapsed times. Native engine timings are nested within nativeCall, not additive. */
 class CaptureTiming(private val progress: (String)->Unit = {}) {
+    private val operation=java.util.UUID.randomUUID().toString().take(8)
     private val start=SystemClock.elapsedRealtimeNanos()
     private val marks=linkedMapOf("shutter" to 0.0)
     private val stages=linkedMapOf<String,Double>()
     private val stageStarts=linkedMapOf<String,Double>()
     @Synchronized fun mark(name: String) { marks[name]=(SystemClock.elapsedRealtimeNanos()-start)/1e6 }
     fun <T> stage(name: String,body: ()->T): T {
+        io.github.c52e.filcamera.camera.LocalDiagnostics.event("PIPELINE.begin","operation=$operation stage=$name")
         progress(name)
         val begin=SystemClock.elapsedRealtimeNanos()
-        try { return body() } finally { synchronized(this) { stageStarts[name]=(begin-start)/1e6;stages[name]=(SystemClock.elapsedRealtimeNanos()-begin)/1e6 } }
+        var success=false
+        try {return body().also {success=true}} finally {
+            val elapsed=(SystemClock.elapsedRealtimeNanos()-begin)/1e6
+            synchronized(this) {stageStarts[name]=(begin-start)/1e6;stages[name]=elapsed}
+            io.github.c52e.filcamera.camera.LocalDiagnostics.event("PIPELINE.end","operation=$operation stage=$name success=$success elapsedMs=$elapsed")
+        }
     }
     @Synchronized fun json(): JSONObject {
         val queues=JSONObject()

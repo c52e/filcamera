@@ -3,6 +3,7 @@ package io.github.c52e.filcamera
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
+import io.github.c52e.filcamera.camera.LocalDiagnostics
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -37,6 +38,7 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
     private var details: JSONObject?=null
     private val later=Runnable {if(running) pending=true else render()}
     fun open(value: PhotoRepository.Photo,recipe: FilmRecipe) {
+        LocalDiagnostics.event("EDIT.open")
         close();photo=value;active=true;mutable.value=State(recipe=recipe,message=tr(Texts.string.reading_original));change(recipe)
     }
     fun change(recipe: FilmRecipe) {
@@ -68,9 +70,9 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 result.put("output",PhotoOutput.metadata(file,encoding))
                 rendered=result.put("input",JSONObject().put("kind","dng").put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
                     .put("framing",prepared.framing.json()).put("renderQuality","editing-preview").put("timing",timing.json()).put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use {it.readText()}))
-            } catch(e: OutOfMemoryError) {input.close();FilmEngine.close();error=tr(Texts.string.out_of_memory_original_and_previous_result_retained)}
+            } catch(e: OutOfMemoryError) {input.close();FilmEngine.close();error=LocalDiagnostics.failure("EDIT-003","editor-memory",tr(Texts.string.out_of_memory_original_and_previous_result_retained),e)}
             catch(e: InterruptedException) { /* Parameter changes reuse the prepared RAW input. Page close releases it on FilmWorker. */ }
-            catch(e: Exception) {input.close();FilmEngine.close();error=e.message ?: tr(Texts.string.development_failed)}
+            catch(e: Exception) {input.close();FilmEngine.close();error=LocalDiagnostics.failure("EDIT-002","editor-render",e.message ?: tr(Texts.string.development_failed),e,"generation=$gen")}
             main.post {
                 running=false
                 if(current() && rendered!=null) {
@@ -88,6 +90,7 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
         val original=photo ?: return;val s=mutable.value
         if(s.busy || s.resultHash!=s.recipe.hash || s.file==null || details==null) return
         val frozen=s.recipe;val gen=generation
+        LocalDiagnostics.event("EDIT.save")
         mutable.value=s.copy(busy=true,saving=true,message=tr(Texts.string.saving_copy))
         FilmWorker.execute {
             var result: PhotoRepository.Version?=null;var error: String?=null
@@ -109,9 +112,9 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                     .put("input",JSONObject().put("kind","dng").put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
                     .put("timing",timing.json()).put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use {it.readText()}))
                 result=repository.saveEdit(original,file,rendered)
-                try {repository.publish(result)} catch(e: Exception) {error=tr(Texts.string.copy_retained_gallery_save_failed_you_can_retry)}
-            } catch(e: OutOfMemoryError) {error=tr(Texts.string.out_of_memory_original_and_previous_result_retained)}
-            catch(e: Exception) {error=e.message}
+                try {repository.publish(result)} catch(e: Exception) {error=LocalDiagnostics.failure("SAVE-002","gallery-save",tr(Texts.string.copy_retained_gallery_save_failed_you_can_retry),e)}
+            } catch(e: OutOfMemoryError) {error=LocalDiagnostics.failure("EDIT-003","editor-memory",tr(Texts.string.out_of_memory_original_and_previous_result_retained),e)}
+            catch(e: Exception) {error=LocalDiagnostics.failure("SAVE-001","editor-save",e.message ?: tr(Texts.string.operation_failed),e)}
             finally {file.delete();input.close();FilmEngine.close()}
             main.post {if(result!=null) saved();if(active && generation==gen) {mutable.value=mutable.value.copy(busy=false,saving=false,message=error.orEmpty());done(result,error)}}
         }

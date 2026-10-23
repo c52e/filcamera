@@ -3,6 +3,7 @@ package io.github.c52e.filcamera
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
+import io.github.c52e.filcamera.camera.LocalDiagnostics
 import android.app.Application
 import android.net.Uri
 import android.os.Handler
@@ -16,7 +17,7 @@ class CameraViewModel(app: Application): AndroidViewModel(app) {
     data class Ui(val photos: List<PhotoRepository.Photo> = emptyList(),val recipe: FilmRecipe=FilmRecipe(),val message: String="",val working: Boolean=false,
         val messagePersistent: Boolean=true,val messageId: Long=0)
     private val loaded=runCatching {FilmRecipe.load(app)}
-    private val mutable=MutableStateFlow(Ui(recipe=loaded.getOrDefault(FilmRecipe()),message=loaded.exceptionOrNull()?.let {tr(Texts.string.could_not_restore_the_last_recipe_using_defaults_value, it.message)}.orEmpty()))
+    private val mutable=MutableStateFlow(Ui(recipe=loaded.getOrDefault(FilmRecipe()),message=loaded.exceptionOrNull()?.let {LocalDiagnostics.failure("APP-002","restore-recipe",tr(Texts.string.could_not_restore_the_last_recipe_using_defaults_value, it.message),it)}.orEmpty()))
     val state=mutable.asStateFlow()
     private val main=Handler(Looper.getMainLooper())
     val repository=PhotoRepository(app)
@@ -25,34 +26,37 @@ class CameraViewModel(app: Application): AndroidViewModel(app) {
     val editor=EditSession(app,repository,::refresh)
     init {refresh()}
     fun recipe(value: FilmRecipe) {value.save(getApplication());mutable.value=mutable.value.copy(recipe=value);camera.changeRecipe(value)}
-    fun refresh() {FilmWorker.execute {try {val photos=repository.scan();main.post {mutable.value=mutable.value.copy(photos=photos)}} catch(e: Exception) {message(e.message ?: tr(Texts.string.could_not_read_library))}}}
+    fun refresh() {FilmWorker.execute {try {val photos=repository.scan();main.post {mutable.value=mutable.value.copy(photos=photos)}} catch(e: Exception) {message(LocalDiagnostics.failure("LIB-001","library-scan",e.message ?: tr(Texts.string.could_not_read_library),e))}}}
     fun message(value: String,persistent: Boolean=true) {main.post {
         mutable.value=mutable.value.copy(message=value,messagePersistent=persistent,messageId=mutable.value.messageId+1)
     }}
     fun dismissMessage(id: Long) {main.post {
         if(mutable.value.messageId==id) mutable.value=mutable.value.copy(message="")
     }}
-    fun work(body: ()->String) {
+    fun work(stage: String="operation",code: String="APP-010",body: ()->String) {
         if(mutable.value.working) return
+        val operation=java.util.UUID.randomUUID().toString().take(8)
+        LocalDiagnostics.event("WORK.start","operation=$operation stage=$stage")
         mutable.value=mutable.value.copy(working=true)
         FilmWorker.execute {
             var failed=false
-            val text=try {body()} catch(e: Exception) {failed=true;e.message ?: tr(Texts.string.operation_failed)}
+            val text=try {body()} catch(e: Exception) {failed=true;LocalDiagnostics.failure(code,stage,e.message ?: tr(Texts.string.operation_failed),e,"operation=$operation")}
+            LocalDiagnostics.event("WORK.finish","operation=$operation stage=$stage failed=$failed")
             main.post {mutable.value=mutable.value.copy(working=false,message=text,messagePersistent=failed,messageId=mutable.value.messageId+1);refresh()}
         }
     }
-    fun import(uri: Uri)=work {repository.importDng(uri);""}
-    fun export(photo: PhotoRepository.Photo,uri: Uri)=work {repository.exportDng(photo,uri);tr(Texts.string.dng_original_exported)}
-    fun publish(version: PhotoRepository.Version)=work {repository.publish(version);tr(Texts.string.saved_to_system_gallery)}
-    fun delete(photo: PhotoRepository.Photo,version: PhotoRepository.Version?)=work {
+    fun import(uri: Uri)=work("import-dng","IO-001") {repository.importDng(uri);""}
+    fun export(photo: PhotoRepository.Photo,uri: Uri)=work("export-dng","IO-002") {repository.exportDng(photo,uri);tr(Texts.string.dng_original_exported)}
+    fun publish(version: PhotoRepository.Version)=work("publish-gallery","SAVE-002") {repository.publish(version);tr(Texts.string.saved_to_system_gallery)}
+    fun delete(photo: PhotoRepository.Photo,version: PhotoRepository.Version?)=work("delete","LIB-002") {
         if(version==null) repository.deletePhoto(photo) else repository.deleteVersion(photo,version)
         ""
     }
     fun deletePhotos(ids: Set<String>) {
         val photos=mutable.value.photos.filter {it.id in ids}
-        work {
+        work("delete-batch","LIB-003") {
             var failed=0
-            photos.forEach {photo->try {repository.deletePhoto(photo)} catch(_: Exception) {failed++}}
+            photos.forEach {photo->try {repository.deletePhoto(photo)} catch(e: Exception) {failed++;LocalDiagnostics.failure("LIB-002","delete",tr(Texts.string.operation_failed),e)}}
             check(failed==0) {
                 tr(Texts.string.deleted_value_photos, photos.size-failed)+tr(Texts.string.value_could_not_be_deleted_please_retry, failed)+tr(Texts.string.system_gallery_copies_retained)
             }
@@ -60,7 +64,7 @@ class CameraViewModel(app: Application): AndroidViewModel(app) {
         }
     }
     fun edit(photo: PhotoRepository.Photo,version: PhotoRepository.Version?,current: ()->Boolean={true},done: ()->Unit) {
-        work {val recipe=repository.recipe(photo,version);main.post {if(current()) {editor.open(photo,recipe);done()}};""}
+        work("open-editor","EDIT-001") {val recipe=repository.recipe(photo,version);main.post {if(current()) {editor.open(photo,recipe);done()}};""}
     }
     override fun onCleared() {camera.close();editor.close();super.onCleared()}
 }

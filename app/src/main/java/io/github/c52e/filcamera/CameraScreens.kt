@@ -114,8 +114,12 @@ import java.io.File
             if(camera.processing) Text(tr(Texts.string.capture_complete_can_move),color=Accent,fontSize=16.sp)
             Box(Modifier.align(Alignment.TopCenter).padding(top=56.dp)) {notice()}
             val message=when {camera.switching->tr(Texts.string.switching_lens_2);camera.whiteBalance.error.isNotBlank()->camera.whiteBalance.error;camera.whiteBalance.pending->tr(Texts.string.updating_white_balance);camera.updating->tr(Texts.string.updating_preview);camera.framingPending->tr(Texts.string.adjusting_framing);else->camera.message}
-            if(message.isNotBlank()) Text(message,Modifier.align(Alignment.TopStart).padding(8.dp)
-                .background(Color.Black.copy(alpha=.65f),RoundedCornerShape(10.dp)).padding(8.dp),fontSize=12.sp,color=Accent,maxLines=3)
+            if(message.isNotBlank()) Column(Modifier.align(Alignment.TopStart).padding(8.dp)
+                .background(Color.Black.copy(alpha=.65f),RoundedCornerShape(10.dp)).padding(8.dp)) {
+                val diagnostic=message.contains("FILCamera ")
+                Text(message,fontSize=12.sp,color=Accent,maxLines=if(diagnostic) 9 else 3)
+                if(diagnostic) TextButton(onClick={openPanel("diagnostics")}) {Text(tr(Texts.string.diagnostic_details))}
+            }
             if(permission && !camera.ready && !camera.busy && !camera.updating && !camera.framingPending && camera.message!=tr(Texts.string.starting_camera) && camera.info?.raw!=false)
                 TextButton(onClick=retry,modifier=Modifier.align(Alignment.BottomCenter)) {Text(tr(Texts.string.retry_camera))}
         }

@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.security.MessageDigest
 
 plugins { id("com.android.application"); kotlin("android"); id("org.jetbrains.kotlin.plugin.compose") }
 val signingProperties = Properties().apply {
@@ -19,6 +20,16 @@ val releaseStorePassword = signingValue("storePassword", "FILCAMERA_STORE_PASSWO
 val releaseKeyPassword = signingValue("keyPassword", "FILCAMERA_KEY_PASSWORD") ?: releaseStorePassword
 val releaseSigningReady = listOf(releaseStore, releaseAlias, releaseStorePassword, releaseKeyPassword).all { !it.isNullOrBlank() }
 
+val diagnosticDigest = MessageDigest.getInstance("SHA-256")
+rootProject.fileTree(rootProject.projectDir) {
+    include("**/src/**/*.kt", "**/src/**/*.xml", "**/*.gradle.kts", "gradle/libs.versions.toml")
+    exclude("**/build/**", ".build/**", ".gradle/**", ".git/**")
+}.files.sortedBy { it.relativeTo(rootProject.projectDir).invariantSeparatorsPath }.forEach {
+    diagnosticDigest.update(it.relativeTo(rootProject.projectDir).invariantSeparatorsPath.toByteArray())
+    diagnosticDigest.update(it.readBytes())
+}
+val diagnosticBuild = diagnosticDigest.digest().joinToString("") { "%02x".format(it) }.take(12)
+
 android {
     namespace = "io.github.c52e.filcamera"
     compileSdk = 35
@@ -28,6 +39,7 @@ android {
         targetSdk = 35
         versionCode = 50
         versionName = "0.23.1"
+        buildConfigField("String", "DIAGNOSTIC_BUILD", "\"$diagnosticBuild\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }

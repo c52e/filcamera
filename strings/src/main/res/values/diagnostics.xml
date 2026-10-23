@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diagnostic_details">Problem diagnosis</string>
+    <string name="diagnostic_privacy">Stored only on this device. Includes device/app versions, recent actions and errors. Photos and location are not collected; paths and URIs are redacted. Review the report before sharing.</string>
+    <string name="diagnostic_copy">Copy summary</string>
+    <string name="diagnostic_export">Share diagnostic ZIP</string>
+    <string name="diagnostic_copied">Diagnostic summary copied</string>
+    <string name="diagnostic_exporting">Preparing report…</string>
+    <string name="diagnostic_export_failed">Could not export diagnostics. You can copy the summary or take a screenshot.</string>
+    <string name="diagnostic_recent">Recent saved errors</string>
+</resources>

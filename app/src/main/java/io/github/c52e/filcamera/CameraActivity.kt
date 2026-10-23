@@ -3,6 +3,7 @@ package io.github.c52e.filcamera
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
+import io.github.c52e.filcamera.camera.LocalDiagnostics
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -94,14 +95,15 @@ class CameraActivity: ComponentActivity() {
     var permission by remember {mutableStateOf(context.checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)}
     val prefs=remember {context.getSharedPreferences("product",0)}
     var asked by remember {mutableStateOf(prefs.getBoolean("cameraAsked",false))}
-    val permissionRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {permission=it}
+    val permissionRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {permission=it;LocalDiagnostics.event("APP.permission","camera=$it")}
     var exportId by rememberSaveable {mutableStateOf("")}
     val importDng=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {it?.let(model::import)}
     val exportDng=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/x-adobe-dng")) {uri->
         ui.photos.firstOrNull {it.id==exportId}?.let {photo->if(uri!=null) model.export(photo,uri)}
     }
     var editExpanded by rememberSaveable {mutableStateOf(true)}
-    LaunchedEffect(page) {if(page!="edit") editExpanded=true}
+    LaunchedEffect(page) {LocalDiagnostics.event("UI.page",page);if(page!="edit") editExpanded=true}
+    LaunchedEffect(edit.message) {if(edit.message.contains("FILCamera ")) model.message(edit.message)}
     val photo=ui.photos.firstOrNull {it.id==selectedId}
     val version=photo?.versions?.firstOrNull {it.id==versionId} ?: photo?.latest
     fun back() {if(page=="edit" && edit.saving) return;panel="";if(page=="edit") {model.editor.close();page="photo"} else if(page=="photo") page="library" else page="camera"}
@@ -109,7 +111,7 @@ class CameraActivity: ComponentActivity() {
     LaunchedEffect(page,photo?.id) {if(page=="edit" && photo!=null && !model.editor.isOpen) model.edit(photo,version,{page=="edit" && selectedId==photo.id}) {}}
     val owner=LocalLifecycleOwner.current
     DisposableEffect(owner) {
-        val observer=LifecycleEventObserver {_,event->if(event==Lifecycle.Event.ON_RESUME) {
+        val observer=LifecycleEventObserver {_,event->LocalDiagnostics.event("APP.lifecycle",event.name);if(event==Lifecycle.Event.ON_RESUME) {
             permission=context.checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED
         }}
         owner.lifecycle.addObserver(observer);onDispose {owner.lifecycle.removeObserver(observer)}
@@ -137,9 +139,12 @@ class CameraActivity: ComponentActivity() {
         if(ui.message.isNotBlank()) Surface(
             modifier=Modifier.padding(horizontal=12.dp).widthIn(max=420.dp).semantics {liveRegion=LiveRegionMode.Polite},
             shape=RoundedCornerShape(12.dp),color=Color(0xff343027),shadowElevation=6.dp) {
-            Row(Modifier.padding(start=16.dp,end=8.dp),verticalAlignment=Alignment.CenterVertically) {
-                Text(ui.message,Modifier.weight(1f).heightIn(max=96.dp).verticalScroll(remember(ui.messageId) {ScrollState(0)}).padding(vertical=12.dp),fontSize=13.sp)
-                if(ui.messagePersistent) TextButton(onClick={model.dismissMessage(ui.messageId)}) {Text(tr(Texts.string.close))}
+            Column(Modifier.padding(horizontal=16.dp)) {
+                Text(ui.message,Modifier.fillMaxWidth().heightIn(max=220.dp).verticalScroll(remember(ui.messageId) {ScrollState(0)}).padding(vertical=12.dp),fontSize=13.sp)
+                if(ui.messagePersistent) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
+                    if(ui.message.contains("FILCamera ")) TextButton(onClick={panel="diagnostics"}) {Text(tr(Texts.string.diagnostic_details))}
+                    TextButton(onClick={model.dismissMessage(ui.messageId)}) {Text(tr(Texts.string.close))}
+                }
             }
         }
     }
@@ -224,8 +229,10 @@ class CameraActivity: ComponentActivity() {
                     Spacer(Modifier.height(20.dp));Text(tr(Texts.string.jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay),color=Muted)
                     TextButton(onClick={page="library";panel=""}) {Text(tr(Texts.string.open_library_import_dng))}
                     TextButton(onClick={panel="license"}) {Text(tr(Texts.string.open_source_licenses_and_attribution))}
+                    TextButton(onClick={panel="diagnostics"}) {Text(tr(Texts.string.diagnostic_details))}
                     TextButton(onClick={panel="developer"}) {Text(tr(Texts.string.developer_options))}
                 }
+                "diagnostics"->DiagnosticsPanel()
                 "license"->{Text(tr(Texts.string.open_source_licenses),fontSize=24.sp);val notice by produceState("") {value=withContext(Dispatchers.IO) {context.assets.open("third-party-notices.txt").bufferedReader().use {it.readText()}}};Text(notice,fontSize=12.sp)}
                 "developer"->{Text(tr(Texts.string.diagnostics),fontSize=24.sp);var comparison by remember {mutableStateOf(model.camera.comparison)}
                     Row(verticalAlignment=Alignment.CenterVertically) {Text(tr(Texts.string.save_preview_comparisons),Modifier.weight(1f));Switch(comparison,{comparison=it;model.camera.comparison=it})}
