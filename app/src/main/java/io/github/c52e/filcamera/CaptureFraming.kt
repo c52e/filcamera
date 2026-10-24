@@ -8,7 +8,7 @@ import io.github.c52e.filcamera.strings.R as Texts
 import io.github.c52e.filcamera.camera.CameraOptics
 import io.github.c52e.filcamera.rawvulkan.VulkanRawDeveloper
 import org.json.JSONObject
-import kotlin.math.floor
+import io.github.c52e.filcamera.camera.FocalCrop
 
 /** Coordinates are relative to the calibrated RAW active rectangle, before orientation. */
 data class CaptureFraming(val width: Int,val height: Int,val left: Int,val top: Int,val cropWidth: Int,val cropHeight: Int,
@@ -26,10 +26,7 @@ data class CaptureFraming(val width: Int,val height: Int,val left: Int,val top: 
         fun create(w: Int,h: Int,target: Double?,optics: CameraOptics?): CaptureFraming {
             if(target==null) return CaptureFraming(w,h,0,0,w,h,null,optics)
             val native=requireNotNull(optics?.equivalentMm) { tr(Texts.string.cannot_calculate_native_equivalent_focal_length) };require(target.isFinite() && target>native)
-            fun gcd(a: Int,b: Int): Int=if(b==0) a else gcd(b,a%b)
-            val divisor=gcd(w,h);val unitW=w/divisor;val unitH=h/divisor
-            val units=(floor(divisor*native/target).toInt()/2)*2;require(units>=2)
-            val cw=unitW*units;val ch=unitH*units
+            val (cw,ch)=FocalCrop.dimensions(w,h,native,target)
             return CaptureFraming(w,h,(w-cw)/2,(h-ch)/2,cw,ch,target,optics)
         }
         fun read(j: JSONObject?,w: Int,h: Int): CaptureFraming {

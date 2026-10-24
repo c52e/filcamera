@@ -25,7 +25,10 @@ import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
-data class CameraInfo(val id: String, val raw: Boolean, val preview: Size, val still: Size, val sensorRotation: Int, val front: Boolean, val evMin: Int, val evMax: Int, val evStep: Float, val realtimeTimestamps: Boolean, val optics: CameraOptics?=null, val route: LensRoute?=null, val ev: Int=0)
+data class CameraInfo(val id: String, val raw: Boolean, val preview: Size, val still: Size, val sensorRotation: Int, val front: Boolean, val evMin: Int, val evMax: Int, val evStep: Float, val realtimeTimestamps: Boolean, val optics: CameraOptics?=null, val route: LensRoute?=null, val ev: Int=0, val previewStreams: List<PreviewStream> = emptyList()) {
+    fun previewFor(targetMm: Double?): Size = PreviewStreams.select(previewStreams,still.width,still.height,
+        PreviewStreams.scale(optics?.equivalentMm,targetMm,optics?.width ?: still.width,optics?.height ?: still.height)).let {Size(it.width,it.height)}
+}
 data class CameraState(val ready: Boolean = false, val busy: Boolean = false, val message: String = tr(Texts.string.camera_has_not_started), val info: CameraInfo? = null, val failedRoute: LensRoute?=null, val requestTag: Long=0, val processing: Boolean=false)
 
 /** The receiver owns the Image until close(). Retiring the camera cannot invalidate that Image. */
@@ -70,6 +73,13 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     private var surface: Surface? = null
     private var chars: CameraCharacteristics? = null
     private var info: CameraInfo? = null
+    private val previewFallbacks=PreviewFallbacks()
+    private var previewTexture: SurfaceTexture?=null
+    private var previewConfigured: ((CameraInfo)->Unit)?=null
+    private var previewTargetMm: Double?=null
+    private var sessionAttempt=0L
+    private var rejectPreviewAbovePixelsForTest=Long.MAX_VALUE
+    @Volatile private var injectedPreviewFailures=0
     private var pending = false
     private var shooting = false
     private var processing = false
@@ -86,6 +96,13 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     // Instrumentation fault injection only; ignored in non-debuggable applications.
     @Volatile private var suppressManualWbConfirmationForTest=false
     private val wbTestOverridesAllowed=context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+    fun setPreviewFailureLimitForTest(maxPixels: Long) {
+        check(wbTestOverridesAllowed && maxPixels>=0)
+        handler.post {
+            rejectPreviewAbovePixelsForTest=maxPixels;injectedPreviewFailures=0
+        }
+    }
+    fun previewFailureCountForTest(): Int {check(wbTestOverridesAllowed);return injectedPreviewFailures}
     private var wbPending=false
     private var wbCamera: String?=null
     private val whiteBalances=mutableMapOf<String,WhiteBalance>()
@@ -283,12 +300,13 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     private fun emit(message: String) = state(CameraState(session != null && latestResult != null, pending || processing, message, info,requestTag=requestTag,processing=processing))
 
     /** SurfaceTexture is producer-facing; release is called only once the camera has closed. */
-    fun start(texture: SurfaceTexture, target: Surface, release: () -> Unit, selectedRoute: LensRoute, requestTag: Long=0, configured: (CameraInfo) -> Unit) {
+    fun start(texture: SurfaceTexture, target: Surface, release: () -> Unit, selectedRoute: LensRoute, requestTag: Long=0, targetMm: Double?=null, configured: (CameraInfo) -> Unit) {
         handler.post {
             if (!alive) { release(); return@post }
             stopInternal()
             val gen = generation
             surface = target; releaseTarget = release; route=selectedRoute;this.requestTag=requestTag
+            previewTexture=texture;previewConfigured=configured;previewTargetMm=targetMm
             var phase="characteristics"
             LocalDiagnostics.event("CAM.start","attempt=$requestTag $selectedRoute")
             LocalDiagnostics.event("CAM.inventory",runCatching {manager.cameraIdList.joinToString()}.getOrElse {it.javaClass.simpleName})
@@ -298,7 +316,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
                 logicalChars=if(selectedRoute.openId==selectedRoute.lensId) chars else manager.getCameraCharacteristics(selectedRoute.openId)
                 physicalKeys=if(selectedRoute.physicalId!=null) logicalChars?.availablePhysicalCameraRequestKeys?.toSet() ?: emptySet() else emptySet()
                 phase="configure"
-                configure(selectedRoute,requireNotNull(chars),texture,configured)
+                configure(selectedRoute,requireNotNull(chars),texture,targetMm,configured)
                 phase="open"
                 LocalDiagnostics.event("CAM.open","attempt=$requestTag id=${selectedRoute.openId}")
                 open(selectedRoute.openId,gen)
@@ -309,7 +327,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         }
     }
 
-    private fun configure(selectedRoute: LensRoute, c: CameraCharacteristics, texture: SurfaceTexture, configured: (CameraInfo) -> Unit) {
+    private fun configure(selectedRoute: LensRoute, c: CameraCharacteristics, texture: SurfaceTexture, targetMm: Double?, configured: (CameraInfo) -> Unit) {
         previewTone=PreviewToneCurve.create(c);toneRejected=false;toneMismatches=0
         val identity=selectedRoute.lensId
         if(wbCamera!=identity) {wbCamera?.let {whiteBalances[it]=wb};wb=whiteBalances[identity] ?: WhiteBalance();wbCamera=identity}
@@ -335,13 +353,19 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         // Prefer the smallest compatible native RAW mode to bound capture/development memory.
         val still = smallestRawOutput(compatible) {it.width to it.height}
             ?: error(tr(Texts.string.effective_raw_exceeds_60_megapixels))
-        val previews = map.getOutputSizes(SurfaceTexture::class.java)
-        val bounded = previews.filter { it.width <= 1920 && it.height <= 1080 }
-        val preview = (bounded.ifEmpty { previews.toList() }).minWith(compareBy<Size> { abs(it.width.toFloat()/it.height-still.width.toFloat()/still.height) }.thenBy { abs(it.width*it.height - 1280*960) })
+        val optics=CameraOptics.read(c)
+        val advertised=map.getOutputSizes(SurfaceTexture::class.java).map {size->
+            PreviewStream(size.width,size.height,runCatching {map.getOutputMinFrameDuration(SurfaceTexture::class.java,size)}.getOrDefault(0L))
+        }
+        val streams=previewFallbacks.available(selectedRoute,still.width,still.height,advertised)
+        val scale=PreviewStreams.scale(optics?.equivalentMm,targetMm,optics?.width ?: still.width,optics?.height ?: still.height)
+        val chosen=PreviewStreams.select(streams,still.width,still.height,scale)
+        val preview=Size(chosen.width,chosen.height)
+        LocalDiagnostics.event("CAM.preview","route=$selectedRoute targetMm=$targetMm input=$preview scale=$scale effective=${preview.width*scale}x${preview.height*scale} minFrameDurationNs=${chosen.minFrameDurationNs}")
         val range = c[CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE]
         info = CameraInfo(selectedRoute.openId,true,preview,still,c[CameraCharacteristics.SENSOR_ORIENTATION] ?: 0,
             c[CameraCharacteristics.LENS_FACING] == CameraCharacteristics.LENS_FACING_FRONT,range?.lower ?: 0,range?.upper ?: 0,c[CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP]?.toFloat() ?: 0f,
-            c[CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE] == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME, CameraOptics.read(c),route)
+            c[CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE] == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME, optics,route,previewStreams=streams)
         ev = (if(info!!.evStep>0f) (previousEv/info!!.evStep).roundToInt() else 0).coerceIn(info!!.evMin,info!!.evMax)
         info=info!!.copy(ev=ev)
         texture.setDefaultBufferSize(preview.width,preview.height)
@@ -386,6 +410,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     @Suppress("DEPRECATION")
     private fun createSession(gen: Int) {
         val camera = device ?: return
+        val attempt=++sessionAttempt
         try {
             val outputs=listOf(requireNotNull(surface),requireNotNull(owner).reader.surface).map { output ->
                 OutputConfiguration(output).apply { route?.physicalId?.let { setPhysicalCameraId(it) } }
@@ -393,7 +418,13 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
             camera.createCaptureSession(SessionConfiguration(SessionConfiguration.SESSION_REGULAR,outputs,
                 java.util.concurrent.Executor { handler.post(it) },object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(s: CameraCaptureSession) {
-                    if (gen != generation) { s.close(); return }
+                    if (gen != generation || attempt!=sessionAttempt) { s.close(); return }
+                    val selected=checkNotNull(info).preview
+                    if(selected.width.toLong()*selected.height>rejectPreviewAbovePixelsForTest) {
+                        injectedPreviewFailures++;s.close()
+                        previewSessionFailed(gen,attempt,"session-configure-injected")
+                        return
+                    }
                     LocalDiagnostics.event("CAM.sessionReady","attempt=$requestTag route=$route")
                     session = s
                     try { repeat();if(wbPending) armWbTimeout(); emit(tr(Texts.string.raw_gpu_preview)) }
@@ -401,13 +432,35 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
                 }
                 override fun onConfigureFailed(s: CameraCaptureSession) {
                     s.close()
-                    if (gen != generation) return
-                    fail(tr(Texts.string.device_rejected_this_lens_s_preview_raw_stream_combination),"CAM-020",stage="session-configure")
+                    previewSessionFailed(gen,attempt,"session-configure")
                 }
             }))
         } catch (e: Exception) {
-            if(gen!=generation) return
-            fail(tr(Texts.string.could_not_create_raw_session_value, e.message),"CAM-020",e,"session-create")
+            previewSessionFailed(gen,attempt,"session-create",e)
+        }
+    }
+
+    private fun previewSessionFailed(gen: Int,attempt: Long,stage: String,cause: Exception?=null) {
+        if(gen!=generation || attempt!=sessionAttempt) return
+        val current=info ?: return
+        val selectedRoute=route ?: return
+        val failed=PreviewStream(current.preview.width,current.preview.height)
+        previewFallbacks.reject(selectedRoute,current.still.width,current.still.height,failed)
+        val remaining=previewFallbacks.available(selectedRoute,current.still.width,current.still.height,current.previewStreams)
+        if(remaining.isEmpty()) {
+            fail(tr(Texts.string.device_rejected_this_lens_s_preview_raw_stream_combination),"CAM-020",cause,stage)
+            return
+        }
+        val next=current.copy(previewStreams=remaining).let {it.copy(preview=it.previewFor(previewTargetMm))}
+        LocalDiagnostics.event("CAM.previewFallback","attempt=$requestTag route=$selectedRoute raw=${current.still} failed=${current.preview} next=${next.preview} stage=$stage")
+        try {
+            checkNotNull(previewTexture).setDefaultBufferSize(next.preview.width,next.preview.height)
+            info=next
+            previewConfigured?.invoke(next)
+            // Queue the retry after closing the failed session; stale attempts cannot restart it.
+            handler.post {if(gen==generation && attempt==sessionAttempt) createSession(gen)}
+        } catch(e: Exception) {
+            fail(tr(Texts.string.could_not_create_raw_session_value,e.message),"CAM-020",e,"preview-fallback")
         }
     }
 
@@ -635,6 +688,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
     fun stop() { handler.post { stopInternal(); emit(tr(Texts.string.camera_paused)) } }
     private fun stopInternal() {
         generation++
+        sessionAttempt++;previewTexture=null;previewConfigured=null;previewTargetMm=null
         clearFocus();latestResult=null;regionMappings.clear()
         wbTimeout?.let(handler::removeCallbacks);wbRevision++
         pending = false; shooting = false

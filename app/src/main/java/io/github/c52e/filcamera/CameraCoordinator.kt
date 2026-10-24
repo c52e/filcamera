@@ -142,7 +142,9 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         val same=selected?.lens?.route==option.lens?.route
         selected=option;switchError=""
         mutable.value=mutable.value.copy(selectedFocal=id,targetMm=option.targetMm)
-        if(same && !mutable.value.switching && configuredReady) refreshFraming() else switchLens()
+        val info=mutable.value.info
+        val sameSize=info!=null && info.previewStreams.isNotEmpty() && info.previewFor(option.targetMm)==info.preview
+        if(same && sameSize && !mutable.value.switching && configuredReady) refreshFraming() else switchLens()
     }
     private fun switchLens() {
         synchronized(lock) {previewResults.clear()}
@@ -162,7 +164,7 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
         mutable.value=mutable.value.copy(sourceStarts=mutable.value.sourceStarts+1)
         // Primary camera only: measured improvement. Other lenses retained ISP after A/B regression.
         controller.setControlledPreviewTone(route.lensId==catalog.defaultLensId)
-        controller.start(texture,surface,release,route,serial) {info->
+        controller.start(texture,surface,release,route,serial,targetMm=selected?.targetMm) {info->
             main.post {if(active && serial==switchSerial && next===view) {
                 next.sourceWidth=info.preview.width;next.sourceHeight=info.preview.height;next.realtimeTimestamps=info.realtimeTimestamps
                 mutable.value=mutable.value.copy(info=info,ev=info.ev);refreshFraming()
@@ -225,6 +227,8 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     internal fun resetFrameProbe()=effect.resetFrameProbe()
     internal fun setControlledPreviewToneForTest(enabled: Boolean)=controller.setControlledPreviewTone(enabled)
     internal fun frameProbe()=effect.frameProbe()
+    internal fun setPreviewFailureLimitForTest(maxPixels: Long)=controller.setPreviewFailureLimitForTest(maxPixels)
+    internal fun previewFailureCountForTest()=controller.previewFailureCountForTest()
     fun exposure(value: Int) {val info=mutable.value.info ?: return;val v=value.coerceIn(info.evMin,info.evMax);controller.setExposureCompensation(v);mutable.value=mutable.value.copy(ev=v)}
     fun changeRecipe(value: FilmRecipe) {
         val colorChanged=recipe.colorHash!=value.colorHash;recipe=value
