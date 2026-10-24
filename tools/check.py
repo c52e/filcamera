@@ -23,10 +23,10 @@ class Document(HTMLParser):
 
 def check():
     docs={}
-    for file in [ROOT/'index.html',ROOT/'zh/index.html']:
+    for file in [ROOT/route/'index.html' for route in ('', 'zh', 'zh-hant', 'ja')]:
         doc=Document(file);doc.feed(file.read_text(encoding='utf-8-sig'));docs[file]=doc
         assert doc.h1==1 and doc.title and doc.description and doc.lang
-        assert {'en','zh-CN','x-default'} <= doc.alternates
+        assert {'en','zh-CN','zh-Hant','ja','x-default'} <= doc.alternates
     for file,doc in docs.items():
         for target in doc.links:
             url=urlsplit(target)
@@ -38,5 +38,5 @@ def check():
             assert path.is_relative_to(ROOT), f'Escaping URL: {target}'
             if url.fragment and path in docs: assert url.fragment in docs[path].ids, target
     assert (ROOT/'.nojekyll').is_file()
-    print('PASS: EN/ZH metadata, semantic headings, language alternatives, local resources and anchor links')
+    print('PASS: EN/ZH-Hans/ZH-Hant/JA metadata, semantic headings, language alternatives, local resources and anchor links')
 if __name__=='__main__': check()

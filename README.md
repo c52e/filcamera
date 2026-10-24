@@ -1,7 +1,8 @@
 # FILCamera website
 
 Static project website for [FILCamera](https://github.com/c52e/filcamera).
-English is at `index.html`; Chinese is at `zh/index.html`. Edit both pages together.
+English is at `index.html`, Simplified Chinese at `zh/index.html`, Traditional Chinese
+at `zh-hant/index.html` and Japanese at `ja/index.html`. Keep all four pages in sync.
 Shared CSS, language behavior and the original FILCamera SVG icon are in `assets/`.
 No build step, package manager, external font service or CDN is required.
 
@@ -19,12 +20,15 @@ project subpath so asset and language URLs behave like GitHub Pages. Stop with C
 
 ## Language behavior
 
-English and Chinese are complete static documents. On the English entry page,
-JavaScript chooses Chinese when the first browser language is Chinese, unless a
-manual language choice was saved. Direct links to the Chinese page remain Chinese.
+All four languages are complete static documents. On the English entry page,
+JavaScript uses the first browser language unless a manual language choice was saved.
+Chinese with an explicit Hans/Hant script follows that script; otherwise TW/HK/MO
+select Traditional Chinese, and other Chinese locales select Simplified Chinese.
+Japanese selects Japanese; other languages fall back to English. Direct localized
+links keep their language. Existing `zh` query values and stored preferences remain valid.
 Language links save a preference when storage is available and include `?lang=`
 so manual selection also works when storage is blocked. With JavaScript disabled,
-both pages and normal language links remain usable. No cookies or tracking are used.
+all four pages and normal language links remain usable. No cookies or tracking are used.
 
 ## GitHub Pages deployment
 
@@ -45,13 +49,13 @@ branch”, `gh-pages`, and `/(root)`. The expected URL is
 `https://c52e.github.io/filcamera/`. `.nojekyll` disables Jekyll processing.
 
 All runtime local links are relative. If the repository name or domain changes,
-update the canonical/Open Graph/alternate URLs in both pages and this documentation.
+update the canonical/Open Graph/alternate URLs in all four pages and this documentation.
 Downloads link to the project's Releases page, not to a guessed APK filename.
 Repository and release availability must be confirmed when publishing.
 
 ## Checks and maintenance
 
-Check both languages at desktop, tablet and narrow phone widths; test language
+Check all four languages at desktop, tablet and narrow phone widths; test language
 selection, storage blocked, JavaScript disabled, keyboard navigation and reduced
 motion. Screenshots and local verification reports belong in ignored `artifacts/`.
 Update device requirements and feature descriptions only from the app's verified

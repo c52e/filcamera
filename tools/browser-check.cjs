@@ -10,6 +10,7 @@ fs.mkdirSync(output,{recursive:true});
  const results=[];const errors=[];
  async function open(options={}){const context=await browser.newContext(options);const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.url().startsWith(base)&&r.status()>=400)errors.push(`${r.status()} ${r.url()}`)});return {context,page}}
  for(const [name,route,width,height,locale] of [
+  ['desktop-hant','zh-hant/',1440,1000,'en-US'],['desktop-ja','ja/',1440,1000,'en-US'],['narrow-hant','zh-hant/',320,760,'en-US'],['narrow-ja','ja/',320,760,'en-US'],
   ['desktop-en','',1440,1000,'en-US'],['desktop-zh','zh/',1440,1000,'en-US'],
   ['mobile-en','',390,844,'en-US'],['mobile-zh','zh/',390,844,'zh-CN'],
   ['tablet-en','',768,1024,'en-US'],['narrow-zh','zh/',320,760,'zh-CN']]){
@@ -25,14 +26,14 @@ fs.mkdirSync(output,{recursive:true});
   await page.getByRole('link',{name:'EN',exact:true}).click();await page.waitForURL('**/filcamera/?lang=en');
   assert.equal(await page.locator('html').getAttribute('lang'),'en');
   await page.goto(base);assert.equal(await page.locator('html').getAttribute('lang'),'en');
-  await page.getByRole('link',{name:'中文',exact:true}).click();await page.waitForURL('**/filcamera/zh/?lang=zh');
+  await page.getByRole('link',{name:'简体',exact:true}).click();await page.waitForURL('**/filcamera/zh/?lang=zh');
   await page.goto(base);await page.waitForURL('**/filcamera/zh/');
   results.push({test:'browser detection, manual selection and persisted preference',result:'pass'});await context.close();
  }
  {
   const {context,page}=await open({locale:'zh-CN',javaScriptEnabled:false});
   await page.goto(base);assert.equal(await page.locator('html').getAttribute('lang'),'en');
-  await page.getByRole('link',{name:'中文',exact:true}).click();assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
+  await page.getByRole('link',{name:'简体',exact:true}).click();assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
   assert.equal(await page.locator('.feature').count(),6);results.push({test:'no JavaScript: full content and language navigation',result:'pass'});await context.close();
  }
  {
@@ -47,6 +48,15 @@ fs.mkdirSync(output,{recursive:true});
   await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.className),'skip');
   await page.keyboard.press('Enter');assert(await page.evaluate(()=>location.hash==='#main'));
   results.push({test:'reduced motion and keyboard skip link',result:'pass'});await context.close();
+ }
+ for (const [locale,route,tag] of [['zh-TW','zh-hant/','zh-Hant'],['zh-HK','zh-hant/','zh-Hant'],['zh-MO','zh-hant/','zh-Hant'],['zh-SG','zh/','zh-CN'],['ja-JP','ja/','ja'],['fr-FR','','en']]) {
+  const {context,page}=await open({locale});await page.goto(base);await page.waitForURL(base+route);
+  assert.equal(await page.locator('html').getAttribute('lang'),tag);
+  for (const [label,key,dest,htmltag] of [['繁體','zh-hant','zh-hant/','zh-Hant'],['日本語','ja','ja/','ja'],['EN','en','','en'],['简体','zh','zh/','zh-CN']]) {
+   await page.getByRole('link',{name:label,exact:true}).click();await page.waitForURL(base+dest+'?lang='+key);
+   await page.goto(base);await page.waitForURL(base+dest);assert.equal(await page.locator('html').getAttribute('lang'),htmltag);
+  }
+  results.push({test:'language matching and four-way selection: '+locale,result:'pass'});await context.close();
  }
  assert.deepEqual(errors,[]);results.push({test:'runtime errors and local HTTP failures',result:'pass'});
  fs.writeFileSync(path.join(output,'browser-report.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));await browser.close();
