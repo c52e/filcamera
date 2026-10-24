@@ -106,6 +106,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_ba
         }
         std::call_once(environment,[]{setenv("FILMCAMERA_GPU_CAM16","1",1);});
         if(!context || context->assets!=a.bytes){context.reset();context=std::make_unique<Context>(a.bytes);}
+        context->gpu.configureFilmCache(nullptr);
         auto p=modelParams(ev,compensatePrint,false,gamma,printEv,contrast,magenta,yellow,f.bytes,paper.bytes);
         spk_image input{grid.data(),845,325,SPK_CS_PROPHOTO},out{};
         struct Release {spk_image* image;~Release(){spk_image_free(image);}} release{&out};
@@ -200,7 +201,7 @@ extern "C" JNIEXPORT jint JNICALL Java_io_github_c52e_filcamera_FilmEngine_testD
 extern "C" JNIEXPORT void JNICALL Java_io_github_c52e_filcamera_FilmEngine_testWorkgroup(JNIEnv*,jobject,jint size,jint rawX,jint rawY){fc_gpu_set_workgroup(size,rawX,rawY);}
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_c52e_filcamera_FilmEngine_liveGpuImages(JNIEnv*,jobject){return jlong(fc_gpu_live_images());}
 extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_renderNative(
-    JNIEnv* env,jobject,jstring assets,jstring source,jint width,jint height,jfloat ev,jlong request,jstring target,jboolean compensatePrint,jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile,jboolean dirSpatial,jboolean filmDiffusion,jboolean printDiffusion,jboolean grain,jboolean halation,jlong seed,jobject rgba,jobject memoryInput,jlong gpuImage) {
+    JNIEnv* env,jobject,jstring assets,jstring source,jint width,jint height,jfloat ev,jlong request,jstring target,jboolean compensatePrint,jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile,jboolean dirSpatial,jboolean filmDiffusion,jboolean printDiffusion,jboolean grain,jboolean halation,jlong seed,jobject rgba,jobject memoryInput,jlong gpuImage,jboolean cacheFilm) {
     long long id=request;RenderScope progress(id);
     try {
         fc_gpu_reset_counts();
@@ -266,6 +267,18 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         }
         p.print_glare_active=0;
 
+        // Keep this list alongside the complete product parameter adapter above.
+        // Every variable consumed before paper exposure belongs here, including
+        // the fixed-seed grain realisation and the numerical execution policy.
+        // Immutable source identity also covers RAW calibration, WB and framing.
+        audit::FilmCacheKey filmKey;
+        filmKey.inputImage=uint64_t(gpuImage);filmKey.width=uint32_t(width);filmKey.height=uint32_t(height);
+        filmKey.seed=uint32_t(seed);filmKey.optimizations=fc_gpu_optimizations();filmKey.workgroup=fc_gpu_workgroup();
+        filmKey.storage=fc_gpu_selected_storage();filmKey.relaxed=fc_gpu_relaxed();
+        filmKey.dirSpatial=dirSpatial;filmKey.filmDiffusion=filmDiffusion;filmKey.grain=grain;filmKey.halation=halation;
+        filmKey.exposure=ev;filmKey.gamma=gamma;filmKey.profile=f.bytes;
+        context->gpu.configureFilmCache(cacheFilm && deviceInput && packed?&filmKey:nullptr);
+
         spk_image in{pixels,width,height,SPK_CS_PROPHOTO},out{};
         struct Release {spk_image* image;~Release(){spk_image_free(image);}} release{&out};
         auto start=std::chrono::steady_clock::now();
@@ -287,6 +300,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         std::string result="{\"cancelled\":false,\"filmEv\":"+std::to_string(ev)+",\"printExposureCompensation\":"+(compensatePrint?"true":"false")+",\"renderMs\":"+std::to_string(ms)+",\"gpuAllocationBytes\":"+std::to_string(context->gpu.allocationBytes())+"}";
         result.pop_back();result+=",\"outputTransport\":\"";
         result+=packed?"gpu-fused-srgb-rgba8":"linear-srgb-f32";result+="\"}";
+        result.pop_back();result+=",\"filmCache\":{\"state\":\""+std::string(context->gpu.filmCacheState())+
+            "\",\"bytes\":"+std::to_string(context->gpu.filmCacheBytes())+"}}";
         char timings[32768]{};
         if(spk_stage_timings_json(timings,sizeof(timings))>0) {result.pop_back();result+=",\"stageTimings\":";result+=timings;result+="}";}
         const auto transfers=fc_gpu_counts();

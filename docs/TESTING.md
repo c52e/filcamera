@@ -34,6 +34,18 @@ films/papers/effects: use representative fixed recipes and expand only on failur
 
 Optional device checks:
 
+- `GpuFilmCacheTest`, enabled with instrumentation argument `retainedDng` set
+  to an existing DNG path relative to the debug app's `files` directory, runs
+  same-binary GPU-negative-cache on/off comparisons. It checks exact pre-JPEG
+  RGBA SHA-256 equality for print edits, film/seed/source/resolution invalidation,
+  fixed-seed grain, dispatch failure recovery, close/reopen and cache release.
+  It writes timings, transfer/dispatch counts and hashes to
+  `cache/gpu-film-cache.json`, without publishing a photo or changing the DNG.
+  Compare warm `preview-control-*` and `preview-hit-*` render medians; exclude
+  the first control's pipeline initialization. Timing excludes RAW preparation,
+  JPEG encoding and display. The test also exercises full-resolution caching,
+  while the product only enables caching for editing previews.
+
 - `DngImportTest`, enabled with instrumentation argument `dngImport=true`,
   reads `cache/import-input.dng` in the debug app. It imports and develops the
   input, verifies that the original is unchanged and removes its own output.

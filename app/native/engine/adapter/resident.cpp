@@ -23,7 +23,7 @@ struct Session::Impl {
     VkCommandPool commands{};VkCommandBuffer command{};VkFence fence{};
     uint32_t pipelines=0,buffers=0;
     struct Buffer {VkBuffer handle{};VkDeviceMemory memory{};void* mapped=nullptr;VkDeviceSize size=0,allocated=0;};
-    Buffer image,constants,packed,saved;
+    Buffer image,constants,packed,saved,negative;
     size_t activeBytes=0;
     VkBuffer externalSource=VK_NULL_HANDLE; // Borrowed from the spatial context until the next dispatch.
     VkBuffer blendSource=VK_NULL_HANDLE;
@@ -44,7 +44,7 @@ struct Session::Impl {
             if(pipelineLayout) vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
             if(layout) vkDestroyDescriptorSetLayout(device,layout,nullptr);
             if(shader) vkDestroyShaderModule(device,shader,nullptr);
-            release(image);release(constants);release(packed);release(saved);
+            release(image);release(constants);release(packed);release(saved);release(negative);
 
         }
         fc_gpu_release(shared);
@@ -65,6 +65,23 @@ struct Session::Impl {
         checked(vkAllocateMemory(device,&ai,nullptr,&b.memory),"allocate buffer");b.allocated=req.size;
         checked(vkBindBufferMemory(device,b.handle,b.memory,0),"bind buffer");
         checked(vkMapMemory(device,b.memory,0,bytes,0,&b.mapped),"map buffer");
+    }
+    void makeNegative(size_t bytes) {
+        release(negative);
+        if(!bytes || bytes>properties.limits.maxStorageBufferRange) throw std::runtime_error("negative storage limit");
+        VkBufferCreateInfo ci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};ci.size=bytes;
+        ci.usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        checked(vkCreateBuffer(device,&ci,nullptr,&negative.handle),"create negative");negative.size=bytes;++buffers;
+        VkMemoryRequirements req{};vkGetBufferMemoryRequirements(device,negative.handle,&req);
+        uint32_t type=shared->memory.memoryTypeCount;
+        for(uint32_t i=0;i<shared->memory.memoryTypeCount;++i)
+            if((req.memoryTypeBits&(1u<<i)) && (shared->memory.memoryTypes[i].propertyFlags&VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {type=i;break;}
+        if(type==shared->memory.memoryTypeCount) for(uint32_t i=0;i<shared->memory.memoryTypeCount;++i)
+            if(req.memoryTypeBits&(1u<<i)) {type=i;break;}
+        if(type==shared->memory.memoryTypeCount) throw std::runtime_error("negative memory unavailable");
+        VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};ai.allocationSize=req.size;ai.memoryTypeIndex=type;
+        checked(vkAllocateMemory(device,&ai,nullptr,&negative.memory),"allocate negative");negative.allocated=req.size;
+        checked(vkBindBufferMemory(device,negative.handle,negative.memory,0),"bind negative");
     }
     void initialize(const uint32_t* words,size_t bytes,const std::vector<float>& table) {
         if(!words || !bytes || bytes%4 || table.empty()) throw std::runtime_error("shader/table invalid");
@@ -176,7 +193,7 @@ struct Session::Impl {
 };
 Session::Session():previous(active){active=this;}
 Session::~Session(){close();active=previous;}
-void Session::close() noexcept {scannerWidth=0;scannerSigma=scannerAmount=0;spatialStarted=false;spatialResident=false;chainPhase=0;chainCount=0;uploaded=readback=0;impl.reset();std::vector<float>().swap(table);std::vector<float>().swap(auxiliary);}
+void Session::close() noexcept {scannerWidth=0;scannerSigma=scannerAmount=0;spatialStarted=false;spatialResident=false;chainPhase=0;chainCount=0;uploaded=readback=0;filmCacheEnabled_=filmValid=false;filmCacheStatus="disabled";requestedFilm={};cachedFilm={};impl.reset();std::vector<float>().swap(table);std::vector<float>().swap(auxiliary);}
 void Session::reset() noexcept {close();}
 Session& Session::current(){if(!active) throw std::runtime_error("GPU session scope missing");return *active;}
 void Session::run(const float* input,float* output,size_t count,const uint32_t* shader,size_t shaderBytes,float threshold,float limit,float power,uint32_t operation) {
@@ -235,12 +252,49 @@ void Session::endFilmScan() {
     if(chainPhase!=15) {close();throw std::runtime_error("incomplete film scan lease");}
     chainPhase=0;chainCount=0;
 }
-uint64_t Session::allocationBytes() const{return impl?impl->image.allocated+impl->constants.allocated+impl->packed.allocated:0;}
+uint64_t Session::allocationBytes() const{return impl?impl->image.allocated+impl->constants.allocated+impl->packed.allocated+impl->saved.allocated+impl->negative.allocated:0;}
 uint32_t Session::pipelineCreates() const{return impl?impl->pipelines:0;}
 uint32_t Session::bufferCreates() const{return impl?impl->buffers:0;}
 }
 
 namespace audit {
+void Session::configureFilmCache(const FilmCacheKey* key) {
+    filmCacheEnabled_=key && key->inputImage;
+    if(!filmCacheEnabled_ || !filmValid || !(cachedFilm==*key)) {
+        filmValid=false;
+        if(impl) impl->release(impl->negative);
+    }
+    requestedFilm=filmCacheEnabled_?*key:FilmCacheKey{};
+    filmCacheStatus=filmCacheEnabled_?"miss":"disabled";
+}
+bool Session::reuseFilm(size_t count) {
+    if(!filmCacheEnabled_ || !filmValid || !impl || !spatialResident || !(requestedFilm==cachedFilm) ||
+       impl->negative.size!=count*sizeof(float)) return false;
+    const size_t bytes=count*sizeof(float);
+    if(impl->image.size<bytes) impl->make(impl->image,bytes);
+    // Never loan the negative to spatial ping-pong: those passes can overwrite
+    // their input. Only this private copy may become the next writable plane.
+    if(!fc_gpu_copy(impl->shared,impl->negative.handle,impl->image.handle,bytes)) throw std::runtime_error("Restore negative failed");
+    impl->activeBytes=bytes;impl->externalSource=VK_NULL_HANDLE;impl->blendSource=VK_NULL_HANDLE;
+    spatialStarted=true;filmCacheStatus="hit";
+    return true;
+}
+void Session::retainFilm(size_t count) noexcept {
+    if(!filmCacheEnabled_ || !impl || !spatialResident || impl->activeBytes!=count*sizeof(float)) return;
+    filmValid=false;
+    try {
+        const auto source=deviceView();
+        if(impl->negative.size!=impl->activeBytes) impl->makeNegative(impl->activeBytes);
+        if(!fc_gpu_copy(impl->shared,source.buffer,impl->negative.handle,impl->activeBytes)) throw std::runtime_error("Retain negative failed");
+        cachedFilm=requestedFilm;filmValid=true;
+    } catch(...) {
+        // Optional cache admission must not turn a valid render into an OOM.
+        // The original density is still available to the print stage.
+        impl->release(impl->negative);filmCacheStatus="store-refused";
+        fc_gpu_clear_memory_error();
+    }
+}
+uint64_t Session::filmCacheBytes() const {return impl?impl->negative.allocated:0;}
 FcGpuBufferView Session::deviceView() const {if(!impl || !impl->image.handle) throw std::runtime_error("Missing resident image");return {impl->shared,impl->externalSource?impl->externalSource:impl->image.handle,impl->activeBytes};}
 void Session::importDevice(FcGpuBufferView source,size_t bytes) {
     if(!impl || source.owner!=impl->shared || !source.buffer || source.element!=FC_GPU_F32 || bytes!=impl->activeBytes || bytes>source.bytes)

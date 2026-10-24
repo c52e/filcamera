@@ -3008,19 +3008,23 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
         if(cancellation_requested(cancel,cancel_user_data)) return SPK_ERR_CANCELLED;
         const size_t elements=size_t(npix)*3;
         if(fparams.grain.active || fparams.halation.active || fparams.diffusion_filter.active ||
-           (fparams.dir_couplers.active && fparams.dir_couplers.diffusion_size_um>0) || pparams.diffusion_filter.active) {
+           (fparams.dir_couplers.active && fparams.dir_couplers.diffusion_size_um>0) || pparams.diffusion_filter.active ||
+           audit::Session::current().filmCacheEnabled()) {
             auto& resident=audit::Session::current();
             resident.spatialResident=(resident.inputImage!=0 || std::getenv("FILMCAMERA_RESIDENT_TEST"));
             resident.spatialStarted=false;
             struct ResidentReset {audit::Session& s;~ResidentReset(){s.spatialResident=false;s.spatialStarted=false;}} reset{resident};
             std::vector<float> lograw(resident.spatialResident?0:elements);
-            spk::lab_stage="Film exposure";
-            spk::expose_f32_gain(in->data,pin.gain,width,height,fparams,tc_lut,lograw.data());
-            if(cancellation_requested(cancel,cancel_user_data)) return SPK_ERR_CANCELLED;
-            spk::lab_stage="Film development";
             std::vector<float> density(resident.spatialResident?0:elements);
-            spk::develop(lograw.data(),width,height,film,fparams,density.data());
-            if(cancellation_requested(cancel,cancel_user_data)) return SPK_ERR_CANCELLED;
+            if(!resident.reuseFilm(elements)) {
+                spk::lab_stage="Film exposure";
+                spk::expose_f32_gain(in->data,pin.gain,width,height,fparams,tc_lut,lograw.data());
+                if(cancellation_requested(cancel,cancel_user_data)) return SPK_ERR_CANCELLED;
+                spk::lab_stage="Film development";
+                spk::develop(lograw.data(),width,height,film,fparams,density.data());
+                if(cancellation_requested(cancel,cancel_user_data)) return SPK_ERR_CANCELLED;
+                resident.retainFilm(elements);
+            }
             spk::lab_stage="Print and paper development";
             auto paper=std::move(lograw); // Film exposure is dead; reuse its full-resolution storage.
             spk::audit_print_expose_develop(film,prnt,pparams,density.data(),width,height,paper.data());

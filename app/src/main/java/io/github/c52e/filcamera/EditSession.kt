@@ -64,7 +64,7 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 val assets=PreviewLutStore(context).prepareAssets(::current)
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,requested,id,"",seed,rgba,prepared.pixels,prepared.owner.gpuImage))}
+                val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,requested,id,"",seed,rgba,prepared.pixels,prepared.owner.gpuImage,cacheFilm=true))}
                 if(result.getBoolean("cancelled") || !current()) throw InterruptedException()
                 val encoding=timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
                 result.put("output",PhotoOutput.metadata(file,encoding))

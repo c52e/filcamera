@@ -13,6 +13,18 @@ Capture: Camera2 RAW → full calibration/demosaic → framing, ProPhoto and ori
 readback → JPG 95. Intermediate floating-point images remain GPU-resident. A cropped
 input still spans a simulated 36 mm long-edge film frame.
 
+Darkroom previews retain one GPU float32 CMY negative after film development,
+including fixed-seed grain. The cache uses the immutable GPU input image ID,
+dimensions, film profile/exposure/development, film spatial switches, grain seed
+and numerical execution settings. Paper profile, print exposure/compensation,
+contrast, filters and print diffusion reuse it and rerun printing plus scanning.
+Film-side edits replace it. A device copy restores the negative into writable
+scratch before printing, so spatial ping-pong cannot mutate the cached plane.
+No intermediate image crosses to the CPU. The 3 MP preview adds at most 36 MB
+of pixel storage (plus device alignment); cache admission failure continues
+with a complete render. LUT baking, capture and final saving disable and release
+the cache. Closing/cancelling/failing a native render also discards it.
+
 Preview: Camera2 ISP → GLES, framing/metering and a device-generated recipe LUT.
 LUT updates do not restart the camera. The existing table remains until a validated
 replacement is uploaded; without one, the view uses ISP output.
