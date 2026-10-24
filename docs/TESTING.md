@@ -20,8 +20,10 @@ p99 ≤3 and max ≤16 in 8-bit code units. Test spatial energy/radius, flat fie
 fixed-seed grain statistics as well; a color-only test does not qualify spatial
 changes. A build/lint pass is not evidence of camera HAL compatibility.
 
-For UI/localization changes, check English, Chinese and another system locale
-(English fallback), portrait/landscape, font scaling, permission denial, camera
+For UI/localization changes, check English, Simplified Chinese (zh-CN/zh-SG),
+Traditional Chinese (zh-TW/zh-HK/zh-MO), Japanese and another system locale
+(English fallback). Check system-language changes and Android 13+ per-app language
+settings, portrait/landscape, font scaling, permission denial, camera
 restart, gallery browsing and darkroom cancel/save. Keep system orientation lock
 separate from sensor-derived photo orientation.
 

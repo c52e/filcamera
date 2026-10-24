@@ -58,11 +58,11 @@ class CameraWorkflowTest {
             val originalHash=original?.let {PairCaptureStore.hash(it)}
             val recipe=model.state.value.recipe.hash
             report.put("existingPhotos",existing.size)
-            for(language in if(supportsLocales) listOf("en","zh-CN") else listOf("system")) {
+            for(language in if(supportsLocales) listOf("en","zh-CN","zh-TW","zh-HK","ja") else listOf("system")) {
                 stage("locale-$language")
                 if(supportsLocales) {
                     ui.runOnIdle {Api33Locales.write(app,LocaleList.forLanguageTags(language))}
-                    ui.waitUntil(15000) {ui.activity.resources.configuration.locales[0].language==language.substringBefore('-')}
+                    ui.waitUntil(15000) {ui.activity.resources.configuration.locales[0].toLanguageTag()==language}
                     ready()
                 }
                 for(orientation in listOf(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)) {

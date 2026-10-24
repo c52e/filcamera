@@ -23,6 +23,9 @@ recomputes the final resolution and publishes a separate version. App deletion d
 not delete independently saved system gallery copies.
 
 `strings` owns Android localization. Its application-context resources follow the
-system locale on UI and worker threads. Enum display labels resolve on access;
+system locale on UI and worker threads. English is the fallback; Simplified Chinese
+(`zh-Hans`), Traditional Chinese (`zh-Hant`) and Japanese (`ja`) have complete
+resources, including diagnostic UI. Android 13+ system app-language settings use
+`locales_config.xml`; there is no in-app language selector. Enum display labels resolve on access;
 recipe keys, stages, file formats and capture identifiers are not translated.
 Low-level native and numerical diagnostic text remains English.

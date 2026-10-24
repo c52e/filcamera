@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
     <application android:label="@string/app_name" android:name=".FILCameraApplication" android:icon="@drawable/camera_icon" android:theme="@style/FilmTheme"
-        android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true">
+        android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true" android:localeConfig="@xml/locales_config">
 
         <activity android:name=".CameraActivity" android:theme="@style/CameraTheme" android:exported="true" android:configChanges="orientation|screenSize">
             <intent-filter>

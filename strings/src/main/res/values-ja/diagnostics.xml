@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diagnostic_details">問題の診断</string>
+    <string name="diagnostic_privacy">このデバイス内にのみ保存されます。デバイスとアプリのバージョン、最近の操作やエラーが含まれます。写真や位置情報は収集せず、パスと URI は非表示になります。共有前にレポートの内容を確認してください。</string>
+    <string name="diagnostic_copy">診断の概要をコピー</string>
+    <string name="diagnostic_export">診断 ZIP を共有</string>
+    <string name="diagnostic_copied">診断の概要をコピーしました</string>
+    <string name="diagnostic_exporting">診断レポートを準備中…</string>
+    <string name="diagnostic_export_failed">診断レポートを書き出せませんでした。概要のコピーやスクリーンショットを利用してください。</string>
+    <string name="diagnostic_recent">最近保存されたエラー</string>
+</resources>

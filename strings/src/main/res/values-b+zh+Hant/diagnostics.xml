@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="diagnostic_details">問題診斷</string>
+    <string name="diagnostic_privacy">僅儲存在本機，包含裝置與應用程式版本、近期操作和錯誤。不收集照片或定位，路徑和 URI 會被隱藏。分享前請檢查報告內容。</string>
+    <string name="diagnostic_copy">複製診斷摘要</string>
+    <string name="diagnostic_export">分享診斷包</string>
+    <string name="diagnostic_copied">已複製診斷摘要</string>
+    <string name="diagnostic_exporting">正在準備診斷包…</string>
+    <string name="diagnostic_export_failed">無法匯出診斷包，可以複製摘要或螢幕截圖回報。</string>
+    <string name="diagnostic_recent">最近儲存的錯誤</string>
+</resources>

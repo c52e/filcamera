@@ -32,11 +32,11 @@ class PublicProjectTest {
         }
     }
 
-    @Test fun englishChineseAndFallbackResources() {
-        fun text(locale: String, id: Int): String {
+    @Test fun supportedLanguagesAndFallbackResources() {
+        fun text(locale: String, id: Int, vararg args: Any): String {
             val configuration = Configuration(app.resources.configuration)
             configuration.setLocales(LocaleList.forLanguageTags(locale))
-            return app.createConfigurationContext(configuration).getString(id)
+            return app.createConfigurationContext(configuration).getString(id, *args)
         }
         assertEquals("FILCamera", text("en", Texts.string.app_name))
         assertEquals("Settings", text("en", Texts.string.settings))
@@ -44,9 +44,22 @@ class PublicProjectTest {
         assertEquals("\u8bbe\u7f6e", text("zh-CN", Texts.string.settings))
         assertEquals("White balance", text("en", Texts.string.white_balance))
         assertEquals("\u767d\u5e73\u8861", text("zh-CN", Texts.string.white_balance))
-        assertEquals("Delete 3 photos?", app.createConfigurationContext(Configuration(app.resources.configuration).apply {
-            setLocales(LocaleList.forLanguageTags("en"))
-        }).getString(Texts.string.delete_value_photos, 3))
+        for (locale in listOf("zh", "zh-CN", "zh-SG", "zh-Hans")) {
+            assertEquals(locale, "\u8bbe\u7f6e", text(locale, Texts.string.settings))
+        }
+        for (locale in listOf("zh-TW", "zh-HK", "zh-MO", "zh-Hant")) {
+            assertEquals(locale, "\u8a2d\u5b9a", text(locale, Texts.string.settings))
+            assertEquals("\u554f\u984c\u8a3a\u65b7", text(locale, Texts.string.diagnostic_details))
+            assertEquals("\u522a\u9664 3 \u5f35\u7167\u7247\uff1f", text(locale, Texts.string.delete_value_photos, 3))
+        }
+        for (locale in listOf("ja", "ja-JP")) {
+            assertEquals("\u8a2d\u5b9a", text(locale, Texts.string.settings))
+            assertEquals("\u30db\u30ef\u30a4\u30c8\u30d0\u30e9\u30f3\u30b9", text(locale, Texts.string.white_balance))
+            assertEquals("\u554f\u984c\u306e\u8a3a\u65ad", text(locale, Texts.string.diagnostic_details))
+            assertEquals("3 \u679a\u306e\u5199\u771f\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f", text(locale, Texts.string.delete_value_photos, 3))
+            assertEquals("\u30ba\u30fc\u30e0 1.25 \u500d", text(locale, Texts.string.zoom_2f, 1.25))
+        }
+        assertEquals("Delete 3 photos?", text("en", Texts.string.delete_value_photos, 3))
     }
 
     @Test fun recipeSerializationAndDefaultsRemainCompatible() {

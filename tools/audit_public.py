@@ -18,6 +18,41 @@ def source_files():
     yield from select_files(ROOT)
 
 
+def audit_localizations():
+    errors = []
+    root = ROOT / "strings/src/main/res"
+
+    def resources(directory):
+        result = {}
+        for file in sorted(directory.glob("*.xml")):
+            for node in ET.parse(file).getroot():
+                name = node.attrib["name"]
+                if name in result:
+                    errors.append(f"Duplicate resource: {directory.name}/{name}")
+                result[name] = node
+        return result
+
+    english = resources(root / "values")
+    expected = {name for name, node in english.items() if node.get("translatable") != "false"}
+    # Include non-positional formats used by String.format (even formatted=false).
+    placeholder = re.compile(r"%(?:\d+\$)?[-#+ 0,(<]*\d*(?:\.\d+)?(?:[tT][a-zA-Z]|[a-zA-Z%])")
+    qualifiers = ("values-b+zh+Hans", "values-b+zh+Hant", "values-ja")
+    for qualifier in qualifiers:
+        translated = resources(root / qualifier)
+        if set(translated) != expected:
+            errors.append(f"Translation keys differ: {qualifier}; missing={sorted(expected - set(translated))}; extra={sorted(set(translated) - expected)}")
+        for key in expected & set(translated):
+            original, localized = english[key], translated[key]
+            value = localized.text or ""
+            if not value.strip().strip('"'):
+                errors.append(f"Empty translation: {qualifier}/{key}")
+            if sorted(placeholder.findall(original.text or "")) != sorted(placeholder.findall(value)):
+                errors.append(f"Translation placeholders differ: {qualifier}/{key}")
+            if original.get("formatted", "true") != localized.get("formatted", "true"):
+                errors.append(f"Translation format mode differs: {qualifier}/{key}")
+    return errors
+
+
 def audit():
     errors = []
     private = re.compile(r"[A-Za-z]:[/\\]Users[/\\]|/(?:home|Users)/[A-Za-z0-9_.-]+/|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{25,}")
@@ -31,14 +66,7 @@ def audit():
                 errors.append(f"Possible private path/credential: {relative}")
             if file.suffix in {".kt", ".kts", ".cpp", ".h", ".hpp", ".comp", ".py"} and re.search(r"[\u4e00-\u9fff]", text):
                 errors.append(f"Chinese text outside language resources: {relative}")
-    def resources(qualifier):
-        return {node.attrib["name"]: node.text or "" for node in ET.parse(ROOT / f"strings/src/main/res/{qualifier}/strings.xml").getroot()}
-    english, chinese = resources("values"), resources("values-zh")
-    if set(english) - {"app_name"} != set(chinese):
-        errors.append("English/Chinese resource keys differ")
-    for key in chinese:
-        if sorted(re.findall(r"%\d+\$[a-z]", english.get(key, ""))) != sorted(re.findall(r"%\d+\$[a-z]", chinese[key])):
-            errors.append(f"Translation placeholders differ: {key}")
+    errors.extend(audit_localizations())
     model = ROOT / "app/model-data"
     inventory = json.loads((model / "manifest.json").read_text())["assets"]
     actual = {p.relative_to(model / "assets").as_posix() for p in (model / "assets").rglob("*") if p.is_file()}
@@ -78,4 +106,4 @@ if __name__ == "__main__":
     if failures:
         print("\n".join(failures), file=sys.stderr)
         sys.exit(1)
-    print("Public source audit passed; model hashes and EN/ZH resources match.")
+    print("Public source audit passed; model hashes and EN/ZH-Hans/ZH-Hant/JA resources match.")

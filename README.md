@@ -9,7 +9,7 @@ preview a film recipe, and develop another version later without losing the orig
 - GPU RAW development, spectral film/paper rendering, grain, halation and diffusion.
 - Device-generated preview LUTs, calibrated Kelvin white balance and tap-to-focus.
 - Photo library, pinch zoom, sharing, DNG export/import and non-destructive darkroom.
-- English and Chinese UI, selected by the system language. Other languages use English.
+- English, Simplified Chinese, Traditional Chinese and Japanese UI, selected by the system language. Other languages use English.
 - Offline operation: no account, analytics, advertising or network permission.
 
 The film engine is derived from **Spektrafilm Android** and **spektrafilm by Andrea
@@ -61,7 +61,7 @@ third-party DNGs. Processing is serial and can take several seconds at full reso
 | `gpu-runtime` | Shared Vulkan device, buffers and spatial operations |
 | `preview` | GLES viewfinder and preview geometry |
 | `imaging` | Pure Kotlin calibration/math and CPU test references |
-| `strings` | English/Chinese Android resources |
+| `strings` | English, Simplified/Traditional Chinese and Japanese Android resources |
 | `tools` | Portable build and publication audit |
 
 The release application ID is `io.github.c52e.filcamera`; debug builds use

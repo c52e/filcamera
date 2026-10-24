@@ -1,7 +1,8 @@
 # Contributing
 
-Put user-visible text in `strings/src/main/res/values/strings.xml` and its `values-zh`
-counterpart. Never use a translated message as persistent state or a serialization key.
+Put user-visible text in `strings/src/main/res/values/` and translate it in
+`values-b+zh+Hans`, `values-b+zh+Hant` and `values-ja`, including diagnostic UI.
+Preserve format placeholders. Never use a translated message as persistent state or a serialization key.
 Code contributions are GPL-3.0-only unless an existing third-party file requires its
 original compatible license. Preserve authorship and mark upstream modifications.
 
