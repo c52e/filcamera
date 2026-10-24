@@ -455,7 +455,13 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         toneRejected=false;toneMismatches=0
         if(session!=null) runCatching {repeat()}.onFailure {fail(tr(Texts.string.preview_tone_curve_request_failed_value, it.message))}
     } }
-    private fun previewRequest() = requireNotNull(device).createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+    private fun captureRequest(template: Int): CaptureRequest.Builder {
+        val camera = requireNotNull(device)
+        // Physical controls are valid only for IDs declared when the request is created.
+        return route?.physicalId?.let { camera.createCaptureRequest(template, setOf(it)) }
+            ?: camera.createCaptureRequest(template)
+    }
+    private fun previewRequest() = captureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
         addTarget(requireNotNull(surface)); controls(this)
         if(controlledPreviewTone && !toneRejected) previewTone?.let {curve->
             focusControl(this,CaptureRequest.TONEMAP_MODE,CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE)
@@ -596,7 +602,7 @@ class CameraController(context: Context, private val state: (CameraState) -> Uni
         if (!pending || shooting) return
         shooting = true; focusTimeout?.let(handler::removeCallbacks)
         try {
-            val request = requireNotNull(device).createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+            val request = captureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(requireNotNull(owner).reader.surface); controls(this)
                 // Request RAW metadata only on stills; rotation is stored with the DNG.
                 set(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE,CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE_ON)
