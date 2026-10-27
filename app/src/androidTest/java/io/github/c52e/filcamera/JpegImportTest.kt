@@ -115,6 +115,29 @@ class JpegImportTest {
             } finally {decoded.recycle()}
         }} finally {file.delete()}
     }
+    @Test fun batchImportContinuesAfterCorruptPhoto()=worker {
+        val repository=PhotoRepository(context)
+        val first=fixture(Color.RED);val last=fixture(Color.BLUE)
+        val corrupt=File(context.cacheDir,"jpeg-test-${UUID.randomUUID()}.jpg")
+        corrupt.writeBytes(byteArrayOf(0xff.toByte(),0xd8.toByte(),0))
+        val before=repository.scan().map {it.id}.toSet()
+        val progress=mutableListOf<Pair<Int,Int>>()
+        var result: PhotoRepository.ImportResult?=null
+        try {
+            val imported=repository.importPhotos(listOf(first,corrupt,last).map {Uri.fromFile(it)}) {current,total->progress+=current to total}
+            result=imported
+            assertEquals(2,imported.photos.size)
+            assertEquals(listOf(2),imported.failures.map {it.index})
+            assertEquals(0,imported.skipped)
+            assertEquals(listOf(1 to 3,2 to 3,3 to 3),progress)
+            assertEquals(listOf(first,last).map {PairCaptureStore.hash(it)},imported.photos.map {PairCaptureStore.hash(it.source)})
+            assertEquals(before+imported.photos.map {it.id},repository.scan().map {it.id}.toSet())
+            assertFalse(imported.photos.first().source.parentFile!!.listFiles().orEmpty().any {it.extension=="pending"})
+        } finally {
+            result?.photos?.forEach {repository.deletePhoto(it)}
+            listOf(first,corrupt,last).forEach {it.delete()}
+        }
+    }
     @Test fun corruptJpegIsRejectedWithoutCatalogEntry() {
         val repository=PhotoRepository(context);val before=repository.scan().map {it.id}.toSet()
         val file=File(context.cacheDir,"jpeg-test-corrupt.jpg");file.writeBytes(byteArrayOf(0xff.toByte(),0xd8.toByte(),0))

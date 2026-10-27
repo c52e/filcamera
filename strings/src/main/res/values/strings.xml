@@ -298,4 +298,8 @@
     <string name="photo_load_failed">"Could not load photo"</string>
     <string name="photo_no_preview">"No preview available"</string>
     <string name="invalid_bitmap_image">"Invalid or unsupported JPEG/HEIC (maximum 60 MP and 16384 pixels per side)"</string>
+    <string name="importing_photos">"Importing %1$d / %2$d"</string>
+    <string name="photos_imported">"Imported %1$d photos."</string>
+    <string name="photos_import_failed">"%1$d failed; %2$d not processed."</string>
+    <string name="photo_import_failure">"Photo %1$d: %2$s"</string>
 </resources>

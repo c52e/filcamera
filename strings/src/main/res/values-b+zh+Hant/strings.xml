@@ -298,4 +298,8 @@
     <string name="photo_load_failed">"照片載入失敗"</string>
     <string name="photo_no_preview">"暫無預覽"</string>
     <string name="invalid_bitmap_image">"JPEG/HEIC 無效或不受支援（最多 6000 萬像素，單邊不超過 16384 像素）"</string>
+    <string name="importing_photos">"正在匯入 %1$d / %2$d"</string>
+    <string name="photos_imported">"已匯入 %1$d 張照片。"</string>
+    <string name="photos_import_failed">"%1$d 張失敗，%2$d 張未處理。"</string>
+    <string name="photo_import_failure">"第 %1$d 張：%2$s"</string>
 </resources>

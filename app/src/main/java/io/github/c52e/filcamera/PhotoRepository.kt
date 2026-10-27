@@ -92,8 +92,26 @@ class PhotoRepository(private val context: Context) {
             else->importDng(uri)
         }
     }
+    data class ImportFailure(val index: Int,val error: Exception)
+    data class ImportResult(val photos: List<Photo>,val failures: List<ImportFailure>,val skipped: Int)
+    private class ImportStorageException: java.io.IOException(tr(Texts.string.not_enough_storage_free_up_space_first))
+    fun importPhotos(uris: List<Uri>,progress: (Int,Int)->Unit): ImportResult {
+        val photos=mutableListOf<Photo>();val failures=mutableListOf<ImportFailure>()
+        var skipped=0
+        for((index,uri) in uris.withIndex()) {
+            progress(index+1,uris.size)
+            try {photos+=importPhoto(uri)} catch(e: Exception) {
+                failures+=ImportFailure(index+1,e)
+                val storageFailure=e is ImportStorageException || generateSequence<Throwable>(e) {it.cause}
+                    .any {it is android.system.ErrnoException && it.errno==android.system.OsConstants.ENOSPC} ||
+                    (e is java.io.IOException && runCatching {android.os.StatFs(lab.path).availableBytes<=64L*1024*1024}.getOrDefault(false))
+                if(storageFailure) {skipped=uris.size-index-1;break}
+            }
+        }
+        return ImportResult(photos,failures,skipped)
+    }
     private fun ensureImportStorage() {
-        require(android.os.StatFs(lab.apply {mkdirs()}.path).availableBytes>DngRawFile.MAX_FILE_BYTES+64L*1024*1024) {tr(Texts.string.not_enough_storage_free_up_space_first)}
+        if(android.os.StatFs(lab.apply {mkdirs()}.path).availableBytes<=DngRawFile.MAX_FILE_BYTES+64L*1024*1024) throw ImportStorageException()
     }
     private fun copyImport(uri: Uri,pending: File,tooLarge: Int) {
         requireNotNull(context.contentResolver.openInputStream(uri)).use {input->pending.outputStream().use {output->
@@ -117,7 +135,7 @@ class PhotoRepository(private val context: Context) {
             val sha256=PairCaptureStore.hash(source)
             atomic(record,JSONObject().put("kind",kind).put("file","imports/$id.$extension").put("sha256",sha256)
                 .put("grainSeed",sha256.take(8).toLong(16)).put("captureRecipe",JSONObject().put("recipe",FilmRecipe().json())))
-            return scan().first {it.id=="import_$id"}
+            return Photo("import_$id",source,record,record.lastModified(),emptyList())
         } catch(e: Throwable) {source.delete();record.delete();throw e} finally {pending.delete()}
     }
     fun importDng(uri: Uri): Photo {
@@ -129,7 +147,7 @@ class PhotoRepository(private val context: Context) {
             val decoded=DngRawFile.read(pending)
             check(pending.renameTo(source))
             atomic(record,JSONObject().put("kind","dng").put("file","imports/$id.dng").put("sha256",PairCaptureStore.hash(source)).put("captureRecipe",decoded.record))
-            return scan().first {it.id=="import_$id"}
+            return Photo("import_$id",source,record,record.lastModified(),emptyList())
         } catch(e: Exception) {source.delete();record.delete();throw e} finally {pending.delete()}
     }
     fun verifySource(photo: Photo) {

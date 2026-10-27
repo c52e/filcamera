@@ -96,7 +96,7 @@ class CameraActivity: ComponentActivity() {
     var asked by remember {mutableStateOf(prefs.getBoolean("cameraAsked",false))}
     val permissionRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {permission=it;LocalDiagnostics.event("APP.permission","camera=$it")}
     var exportId by rememberSaveable {mutableStateOf("")}
-    val importDng=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {it?.let(model::import)}
+    val importPhotos=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {model.import(it)}
     val exportDng=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/x-adobe-dng")) {uri->
         ui.photos.firstOrNull {it.id==exportId}?.let {photo->if(uri!=null) model.export(photo,uri)}
     }
@@ -177,7 +177,7 @@ class CameraActivity: ComponentActivity() {
                         if(selectedPhotos.isNotEmpty()) {
                             CameraIconButton(CameraIcons.SelectAll,tr(Texts.string.select_all),!ui.working) {selectedPhotos=ArrayList(ui.photos.map {it.id})}
                             CameraIconButton(CameraIcons.Delete,tr(Texts.string.delete),!ui.working) {batchDelete=true}
-                        } else TextButton(onClick={importDng.launch(arrayOf("*/*"))},enabled=!ui.working) {Text(tr(Texts.string.import_dng))}
+                        } else TextButton(onClick={importPhotos.launch(arrayOf("*/*"))},enabled=!ui.working) {Text(tr(Texts.string.import_dng))}
                     }
                 }
                 when(page) {
@@ -215,7 +215,11 @@ class CameraActivity: ComponentActivity() {
                 }
             }
         }
-        if(ui.working) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+        if(ui.working) Column(Modifier.fillMaxWidth().align(Alignment.TopCenter)) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            if(ui.importTotal>0) Text(tr(Texts.string.importing_photos,ui.importCurrent,ui.importTotal),
+                Modifier.background(MaterialTheme.colorScheme.surface).padding(horizontal=12.dp,vertical=4.dp),fontSize=13.sp)
+        }
         // An overlay never participates in measuring the photo, grid or controls.
         if(page!="camera" && page!="edit") Box(Modifier.align(Alignment.TopCenter).padding(top=56.dp)) {notice()}
 

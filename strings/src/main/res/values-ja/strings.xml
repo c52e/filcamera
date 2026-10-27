@@ -298,4 +298,8 @@
     <string name="photo_load_failed">"写真を読み込めませんでした"</string>
     <string name="photo_no_preview">"プレビューがありません"</string>
     <string name="invalid_bitmap_image">"JPEG/HEIC が無効か非対応です（最大 6000 万画素、各辺 16384 ピクセル）"</string>
+    <string name="importing_photos">"インポート中 %1$d / %2$d"</string>
+    <string name="photos_imported">"%1$d 枚の写真をインポートしました。"</string>
+    <string name="photos_import_failed">"%1$d 枚失敗、%2$d 枚未処理。"</string>
+    <string name="photo_import_failure">"%1$d 枚目：%2$s"</string>
 </resources>

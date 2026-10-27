@@ -15,7 +15,7 @@ import java.io.File
 
 class CameraViewModel(app: Application): AndroidViewModel(app) {
     data class Ui(val photos: List<PhotoRepository.Photo> = emptyList(),val recipe: FilmRecipe=FilmRecipe(),val message: String="",val working: Boolean=false,
-        val messagePersistent: Boolean=true,val messageId: Long=0)
+        val messagePersistent: Boolean=true,val messageId: Long=0,val importCurrent: Int=0,val importTotal: Int=0)
     private val loaded=runCatching {FilmRecipe.load(app)}
     private val mutable=MutableStateFlow(Ui(recipe=loaded.getOrDefault(FilmRecipe()),message=loaded.exceptionOrNull()?.let {LocalDiagnostics.failure("APP-002","restore-recipe",tr(Texts.string.could_not_restore_the_last_recipe_using_defaults_value, it.message),it)}.orEmpty()))
     val state=mutable.asStateFlow()
@@ -33,7 +33,7 @@ class CameraViewModel(app: Application): AndroidViewModel(app) {
     fun dismissMessage(id: Long) {main.post {
         if(mutable.value.messageId==id) mutable.value=mutable.value.copy(message="")
     }}
-    fun work(stage: String="operation",code: String="APP-010",body: ()->String) {
+    fun work(stage: String="operation",code: String="APP-010",persistentResult: ()->Boolean={false},body: ()->String) {
         if(mutable.value.working) return
         val operation=java.util.UUID.randomUUID().toString().take(8)
         LocalDiagnostics.event("WORK.start","operation=$operation stage=$stage")
@@ -41,11 +41,31 @@ class CameraViewModel(app: Application): AndroidViewModel(app) {
         FilmWorker.execute {
             var failed=false
             val text=try {body()} catch(e: Exception) {failed=true;LocalDiagnostics.failure(code,stage,e.message ?: tr(Texts.string.operation_failed),e,"operation=$operation")}
+            val persistent=failed || persistentResult()
             LocalDiagnostics.event("WORK.finish","operation=$operation stage=$stage failed=$failed")
-            main.post {mutable.value=mutable.value.copy(working=false,message=text,messagePersistent=failed,messageId=mutable.value.messageId+1);refresh()}
+            main.post {mutable.value=mutable.value.copy(working=false,message=text,messagePersistent=persistent,messageId=mutable.value.messageId+1,importCurrent=0,importTotal=0);refresh()}
         }
     }
-    fun import(uri: Uri)=work("import-photo","IO-001") {repository.importPhoto(uri);""}
+    fun import(uris: List<Uri>) {
+        if(uris.isEmpty()) return
+        var hasFailures=false
+        work("import-photos","IO-001",persistentResult={hasFailures}) {
+            val result=repository.importPhotos(uris) {current,total->
+                main.post {mutable.value=mutable.value.copy(importCurrent=current,importTotal=total)}
+            }
+            hasFailures=result.failures.isNotEmpty()
+            result.failures.forEach {LocalDiagnostics.failure("IO-001","import-photo",it.error.message ?: tr(Texts.string.operation_failed),it.error,"item=${it.index}")}
+            buildString {
+                append(tr(Texts.string.photos_imported,result.photos.size))
+                if(hasFailures) {
+                    append('\n');append(tr(Texts.string.photos_import_failed,result.failures.size,result.skipped))
+                    result.failures.take(3).forEach {
+                        append('\n');append(tr(Texts.string.photo_import_failure,it.index,it.error.message ?: tr(Texts.string.operation_failed)))
+                    }
+                }
+            }
+        }
+    }
     fun export(photo: PhotoRepository.Photo,uri: Uri)=work("export-original","IO-002") {repository.exportOriginal(photo,uri);tr(Texts.string.dng_original_exported)}
     fun publish(version: PhotoRepository.Version)=work("publish-gallery","SAVE-002") {repository.publish(version);tr(Texts.string.saved_to_system_gallery)}
     fun delete(photo: PhotoRepository.Photo,version: PhotoRepository.Version?)=work("delete","LIB-002") {
