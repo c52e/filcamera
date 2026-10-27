@@ -45,8 +45,8 @@ class CameraViewModel(app: Application): AndroidViewModel(app) {
             main.post {mutable.value=mutable.value.copy(working=false,message=text,messagePersistent=failed,messageId=mutable.value.messageId+1);refresh()}
         }
     }
-    fun import(uri: Uri)=work("import-dng","IO-001") {repository.importDng(uri);""}
-    fun export(photo: PhotoRepository.Photo,uri: Uri)=work("export-dng","IO-002") {repository.exportDng(photo,uri);tr(Texts.string.dng_original_exported)}
+    fun import(uri: Uri)=work("import-photo","IO-001") {repository.importPhoto(uri);""}
+    fun export(photo: PhotoRepository.Photo,uri: Uri)=work("export-original","IO-002") {repository.exportOriginal(photo,uri);tr(Texts.string.dng_original_exported)}
     fun publish(version: PhotoRepository.Version)=work("publish-gallery","SAVE-002") {repository.publish(version);tr(Texts.string.saved_to_system_gallery)}
     fun delete(photo: PhotoRepository.Photo,version: PhotoRepository.Version?)=work("delete","LIB-002") {
         if(version==null) repository.deletePhoto(photo) else repository.deleteVersion(photo,version)

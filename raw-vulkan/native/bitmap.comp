@@ -1,0 +1,24 @@
+#version 450
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Source {uint source[];};
+layout(binding=1,std430) writeonly buffer Target {float target[];};
+layout(binding=2,std430) buffer Status {uint invalid;};
+layout(push_constant) uniform Push {uint width,height,stride,halfFloat;vec4 row0,row1,row2;} p;
+float linearize(float x) {
+    float a=abs(x);
+    return a<=0.04045 ? x/12.92 : sign(x)*pow((a+0.055)/1.055,2.4);
+}
+void main() {
+    uint i=gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x*64u;
+    if(i>=p.width*p.height) return;
+    uint at=(i/p.width)*p.stride+(i%p.width)*(p.halfFloat!=0u?2u:1u);
+    vec3 encoded;
+    if(p.halfFloat!=0u) encoded=vec3(unpackHalf2x16(source[at]),unpackHalf2x16(source[at+1u]).x);
+    else {uint rgba=source[at];encoded=vec3(rgba&255u,(rgba>>8)&255u,(rgba>>16)&255u)/255.0;}
+    if(any(isnan(encoded)) || any(isinf(encoded))) {atomicOr(invalid,1u);encoded=vec3(0);}
+    vec3 rgb=vec3(linearize(encoded.r),linearize(encoded.g),linearize(encoded.b));
+    float r=p.row0.x*rgb.r+p.row0.y*rgb.g+p.row0.z*rgb.b;
+    float g=p.row1.x*rgb.r+p.row1.y*rgb.g+p.row1.z*rgb.b;
+    float b=p.row2.x*rgb.r+p.row2.y*rgb.g+p.row2.z*rgb.b;
+    target[i*3u]=clamp(r,0.0,1.0);target[i*3u+1u]=clamp(g,0.0,1.0);target[i*3u+2u]=clamp(b,0.0,1.0);
+}

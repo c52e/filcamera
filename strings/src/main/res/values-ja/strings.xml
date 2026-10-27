@@ -109,8 +109,8 @@
     <string name="photo">"写真"</string>
     <string name="select_all">"すべて選択"</string>
     <string name="delete">"削除"</string>
-    <string name="import_dng">"DNG を読み込む"</string>
-    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"写真がまだありません\n撮影するか、DNG オリジナルを読み込んでください"</string>
+    <string name="import_dng">"DNG / JPG / HEIC を読み込む"</string>
+    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"写真がまだありません\n撮影するか、DNG / JPG / HEIC オリジナルを読み込んでください"</string>
     <string name="open_photo_value">"写真 %1$s を開く"</string>
     <string name="select_photo">"写真を選択"</string>
     <string name="dng_nready_to_develop">"DNG\n現像できます"</string>
@@ -123,8 +123,8 @@
     <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"選択した写真のオリジナルと、アプリ内のすべての現像済みバージョンを完全に削除します。システムのギャラリーにあるコピーは残ります。"</string>
     <string name="confirm_delete">"削除する"</string>
     <string name="value_raw_film_camera">"%1$s · RAW フィルムカメラ"</string>
-    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 の写真はシステムのギャラリーに保存されます。DNG オリジナルはアプリ内に保存されます。アンインストール前に書き出してください。"</string>
-    <string name="open_library_import_dng">"ライブラリを開く / DNG を読み込む"</string>
+    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 の写真はシステムのギャラリーに保存されます。オリジナルはアプリ内に保存されます。アンインストール前に書き出してください。"</string>
+    <string name="open_library_import_dng">"ライブラリを開く / DNG / JPG / HEIC を読み込む"</string>
     <string name="open_source_licenses_and_attribution">"オープンソースライセンスと帰属表示"</string>
     <string name="developer_options">"開発者向けオプション"</string>
     <string name="open_source_licenses">"オープンソースライセンス"</string>
@@ -137,12 +137,12 @@
     <string name="share_jpg">"JPG を共有"</string>
     <string name="save_to_system_gallery">"システムのギャラリーに保存"</string>
     <string name="delete_this_developed_version">"この現像済みバージョンを削除"</string>
-    <string name="export_dng_original">"DNG オリジナルを書き出す"</string>
+    <string name="export_dng_original">"オリジナルを書き出す"</string>
     <string name="delete_original_and_all_versions">"オリジナルと全バージョンを削除"</string>
     <string name="delete_this_photo">"この写真を削除しますか？"</string>
     <string name="delete_this_version">"このバージョンを削除しますか？"</string>
-    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"アプリ内の DNG オリジナルとすべての現像済みバージョンを完全に削除します。システムのギャラリーにあるコピーは残ります。"</string>
-    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"この現像済みバージョンのみ削除します。DNG オリジナルとシステムのギャラリーにあるコピーは残ります。"</string>
+    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"アプリ内のオリジナルとすべての現像済みバージョンを完全に削除します。システムのギャラリーにあるコピーは残ります。"</string>
+    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"この現像済みバージョンのみ削除します。オリジナルとシステムのギャラリーにあるコピーは残ります。"</string>
     <string name="viewfinder_tap_to_focus_and_meter">"ファインダー。タップしてピント合わせと測光"</string>
     <string name="focus_and_meter_at_center">"中央でピント合わせと測光"</string>
     <string name="viewfinder_controls">"ファインダーの操作"</string>
@@ -179,7 +179,7 @@
     <string name="camera_exposure_compensation">"カメラの露出補正"</string>
     <string name="live_viewfinder">"ライブファインダー"</string>
     <string name="let_the_light_in">"光を取り込もう"</string>
-    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"カメラへのアクセスを許可すると撮影できます。先に写真の閲覧や DNG の読み込みもできます。"</string>
+    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"カメラへのアクセスを許可すると撮影できます。先に写真の閲覧や DNG / JPG / HEIC の読み込みもできます。"</string>
     <string name="allow_camera_access">"カメラへのアクセスを許可"</string>
     <string name="open_permission_settings">"権限設定を開く"</string>
     <string name="switching_lens_2">"レンズを切り替え中…"</string>
@@ -195,8 +195,7 @@
     <string name="could_not_restore_the_last_recipe_using_defaults_value">"前回のレシピを復元できませんでした。初期設定を使用します：%1$s"</string>
     <string name="could_not_read_library">"ライブラリを読み込めませんでした"</string>
     <string name="operation_failed">"操作に失敗しました"</string>
-    <string name="dng_imported_ready_to_edit_and_develop">"DNG を読み込みました。編集・現像できます"</string>
-    <string name="dng_original_exported">"DNG オリジナルを書き出しました"</string>
+    <string name="dng_original_exported">"オリジナルを書き出しました"</string>
     <string name="saved_to_system_gallery">"システムのギャラリーに保存しました"</string>
     <string name="in_app_photo_deleted_system_gallery_copies_retained">"アプリ内の写真を削除しました。システムのギャラリーにあるコピーは保持されています"</string>
     <string name="deleted_value_photos">"%1$s 枚の写真を削除しました"</string>
@@ -267,7 +266,7 @@
     <string name="invalid_photo_path">"写真のパスが無効です"</string>
     <string name="not_enough_storage_free_up_space_first">"空き容量が不足しています。空き容量を確保してください"</string>
     <string name="dng_file_is_too_large">"DNG ファイルが大きすぎます"</string>
-    <string name="dng_checksum_failed_original_unchanged">"DNG のチェックサム検証に失敗しました。オリジナルは変更されていません"</string>
+    <string name="dng_checksum_failed_original_unchanged">"チェックサム検証に失敗しました。オリジナルは変更されていません"</string>
     <string name="test_gallery_write_failed">"テスト：ギャラリーへの書き込みに失敗しました"</string>
     <string name="reset">"リセット"</string>
     <string name="reset_white_balance">"ホワイトバランスをリセット"</string>
@@ -294,4 +293,9 @@
     <string name="previous_photo">"前の写真"</string>
     <string name="next_photo">"次の写真"</string>
     <string name="off">"オフ"</string>
+    <string name="image_file_too_large">"画像ファイルが大きすぎます"</string>
+    <string name="loading_photo">"写真を読み込み中"</string>
+    <string name="photo_load_failed">"写真を読み込めませんでした"</string>
+    <string name="photo_no_preview">"プレビューがありません"</string>
+    <string name="invalid_bitmap_image">"JPEG/HEIC が無効か非対応です（最大 6000 万画素、各辺 16384 ピクセル）"</string>
 </resources>

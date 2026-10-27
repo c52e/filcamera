@@ -23,7 +23,7 @@ class DngImportTest {
         val task=FutureTask(Callable {
             val repository=PhotoRepository(app)
             val photo=repository.importDng(Uri.fromFile(source))
-            val input=DngEditInput(app)
+            val input=EditInput()
             val output=File(app.cacheDir,"import-developed.jpg")
             try {
                 val timing=CaptureTiming()
@@ -33,7 +33,7 @@ class DngImportTest {
                 val pixels=FilmOutput.buffer(prepared.width,prepared.height)
                 val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
                     SystemClock.elapsedRealtimeNanos(),"",checkNotNull(FilmEngine.recordedSeed(prepared.record)),
-                    pixels,prepared.pixels,prepared.owner.gpuImage))
+                    pixels,prepared.pixels,prepared.gpuImage))
                 assertFalse(result.getBoolean("cancelled"))
                 assertEquals(0L,result.getJSONObject("gpuTransfers").getLong("intermediateReadbackBytes"))
                 PhotoOutput.write(pixels,prepared.width,prepared.height,output,prepared.framing)

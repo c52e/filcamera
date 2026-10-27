@@ -17,7 +17,7 @@ class RenderPerformanceTest {
         val task=FutureTask {
             val source=File(app.filesDir,checkNotNull(relative))
             val hash=PairCaptureStore.hash(source)
-            val input=DngEditInput(app)
+            val input=EditInput()
             val runs=JSONArray()
             android.system.Os.setenv("SPK_GPU_DEBUG","1",true)
             try {
@@ -34,7 +34,7 @@ class RenderPerformanceTest {
                     android.util.Log.i("RenderPerf","BEGIN $index")
                     val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
                         android.os.SystemClock.elapsedRealtimeNanos(),"",FilmEngine.recordedSeed(prepared.record) ?: 123L,
-                        rgba,prepared.pixels,prepared.owner.gpuImage))
+                        rgba,prepared.pixels,prepared.gpuImage))
                     check(!result.getBoolean("cancelled"))
                     val digest=java.security.MessageDigest.getInstance("SHA-256")
                     val view=rgba.duplicate().apply {clear()}
@@ -57,7 +57,7 @@ class RenderPerformanceTest {
                         else android.system.Os.setenv("FILMCAMERA_DIFFUSION_CACHE_OFF","1",true)
                         val result=JSONObject(FilmEngine.render(assets.path,"",resized.width,resized.height,recipe,
                             android.os.SystemClock.elapsedRealtimeNanos(),"",FilmEngine.recordedSeed(resized.record) ?: 123L,
-                            output,resized.pixels,resized.owner.gpuImage))
+                            output,resized.pixels,resized.gpuImage))
                         check(!result.getBoolean("cancelled"))
                         val digest=java.security.MessageDigest.getInstance("SHA-256")
                         digest.update(output.duplicate().apply {clear()})

@@ -5,7 +5,6 @@ import io.github.c52e.filcamera.strings.R as Texts
 
 import android.content.Context
 import android.content.ContentValues
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.MediaStore
 import io.github.c52e.filcamera.rawvulkan.DngRawFile
@@ -19,6 +18,9 @@ class PhotoRepository(private val context: Context) {
     data class Version(val id: String,val file: File,val record: File)
     data class Photo(val id: String,val source: File,val record: File,val date: Long,val versions: List<Version>) {
         val latest get()=versions.lastOrNull()
+        val kind get()=when(source.extension.lowercase()) {"jpg","jpeg"->"jpeg";"heic","heif"->"heic";else->"dng"}
+        val mime get()=when(kind) {"jpeg"->"image/jpeg";"heic"->"image/heic";else->"image/x-adobe-dng"}
+        val displayFile get()=latest?.file ?: source.takeIf {kind!="dng"}
     }
     private val lab=File(context.filesDir,"lab")
     private val renders=File(context.filesDir,"renders")
@@ -52,7 +54,7 @@ class PhotoRepository(private val context: Context) {
         }
         File(lab,"imports").listFiles()?.filter {it.extension=="json"}?.forEach {record->
             val entry=json(record) ?: return@forEach
-            if(entry.optString("kind")!="dng") return@forEach
+            if(entry.optString("kind") !in listOf("dng","jpeg","heic")) return@forEach
             val source=inside(File(lab,entry.getString("file")))
             add("import_"+record.nameWithoutExtension,source,record,null)
         }
@@ -63,32 +65,67 @@ class PhotoRepository(private val context: Context) {
         return sorted
     }
     fun captureRecipe(photo: Photo): FilmRecipe {
-        val record=json(photo.record) ?: DngRawFile.read(photo.source).record
+        val record=json(photo.record) ?: if(photo.kind=="dng") DngRawFile.read(photo.source).record else JSONObject().put("recipe",FilmRecipe().json())
         return FilmRecipe.restore(record.optJSONObject("captureRecipe") ?: record)
     }
     fun recipe(photo: Photo,version: Version?)=version?.let {json(it.record)}?.let {FilmRecipe.restore(it)} ?: captureRecipe(photo)
-    fun thumbnail(version: Version): File {
+    fun thumbnail(file: File): File {
         val cache=File(context.cacheDir,"thumbnails").apply {mkdirs()}
-        val key=PreviewLut.digest((version.file.path+version.file.length()+version.file.lastModified()).toByteArray())
+        val key=PreviewLut.digest((file.path+file.length()+file.lastModified()).toByteArray())
         val dest=File(cache,"$key.jpg")
         if(!dest.isFile) {
-            val size=BitmapFactory.Options().apply {inJustDecodeBounds=true};BitmapFactory.decodeFile(version.file.path,size)
-            var sample=1;while(maxOf(size.outWidth,size.outHeight)/sample>512) sample*=2
-            val bmp=checkNotNull(BitmapFactory.decodeFile(version.file.path,BitmapFactory.Options().apply {inSampleSize=sample}))
+            val bmp=BitmapEditInput.decode(file,maxEdge=512,supportedOnly=false)
             try {PhotoOutput.write(bmp,dest)} finally {bmp.recycle()}
             cache.listFiles()?.sortedByDescending {it.lastModified()}?.drop(160)?.forEach {it.delete()}
         }
         return dest
     }
-    fun importDng(uri: Uri): Photo {
+    fun importPhoto(uri: Uri): Photo {
+        val header=checkNotNull(context.contentResolver.openInputStream(uri)).use {input->
+            val bytes=ByteArray(12);var count=0
+            while(count<bytes.size) {val read=input.read(bytes,count,bytes.size-count);if(read<=0) break;count+=read}
+            bytes
+        }
+        return when {
+            header[0]==0xff.toByte() && header[1]==0xd8.toByte()->importBitmap(uri,"jpeg")
+            String(header,4,4,Charsets.US_ASCII)=="ftyp"->importBitmap(uri,"heic")
+            else->importDng(uri)
+        }
+    }
+    private fun ensureImportStorage() {
         require(android.os.StatFs(lab.apply {mkdirs()}.path).availableBytes>DngRawFile.MAX_FILE_BYTES+64L*1024*1024) {tr(Texts.string.not_enough_storage_free_up_space_first)}
+    }
+    private fun copyImport(uri: Uri,pending: File,tooLarge: Int) {
+        requireNotNull(context.contentResolver.openInputStream(uri)).use {input->pending.outputStream().use {output->
+            val bytes=ByteArray(65536);var total=0L
+            while(true) {
+                val count=input.read(bytes);if(count<0) break
+                total+=count;require(total<=DngRawFile.MAX_FILE_BYTES) {tr(tooLarge)}
+                output.write(bytes,0,count)
+            }
+        }}
+    }
+    private fun importBitmap(uri: Uri,kind: String): Photo {
+        val extension=if(kind=="jpeg") "jpg" else "heic"
+        ensureImportStorage()
+        val id=UUID.randomUUID().toString();val dir=File(lab,"imports").apply {mkdirs()}
+        val pending=File(dir,"$id.pending");val source=File(dir,"$id.$extension");val record=File(dir,"$id.json")
+        try {
+            copyImport(uri,pending,Texts.string.image_file_too_large)
+            BitmapEditInput.decode(pending,maxEdge=512).recycle()
+            check(pending.renameTo(source))
+            val sha256=PairCaptureStore.hash(source)
+            atomic(record,JSONObject().put("kind",kind).put("file","imports/$id.$extension").put("sha256",sha256)
+                .put("grainSeed",sha256.take(8).toLong(16)).put("captureRecipe",JSONObject().put("recipe",FilmRecipe().json())))
+            return scan().first {it.id=="import_$id"}
+        } catch(e: Throwable) {source.delete();record.delete();throw e} finally {pending.delete()}
+    }
+    fun importDng(uri: Uri): Photo {
+        ensureImportStorage()
         val id=UUID.randomUUID().toString();val dir=File(lab,"imports").apply {mkdirs()}
         val pending=File(dir,"$id.pending");val source=File(dir,"$id.dng");val record=File(dir,"$id.json")
         try {
-            requireNotNull(context.contentResolver.openInputStream(uri)).use {input->pending.outputStream().use {output->
-                val bytes=ByteArray(65536);var total=0L
-                while(true) {val n=input.read(bytes);if(n<0) break;total+=n;require(total<=DngRawFile.MAX_FILE_BYTES) {tr(Texts.string.dng_file_is_too_large)};output.write(bytes,0,n)}
-            }}
+            copyImport(uri,pending,Texts.string.dng_file_is_too_large)
             val decoded=DngRawFile.read(pending)
             check(pending.renameTo(source))
             atomic(record,JSONObject().put("kind","dng").put("file","imports/$id.dng").put("sha256",PairCaptureStore.hash(source)).put("captureRecipe",decoded.record))
@@ -100,7 +137,7 @@ class PhotoRepository(private val context: Context) {
         val expected=record?.optString("sha256")?.takeIf {it.isNotBlank()} ?: record?.optJSONObject("files")?.optString("original.dng")?.takeIf {it.isNotBlank()}
         if(expected!=null) require(PairCaptureStore.hash(photo.source)==expected) {tr(Texts.string.dng_checksum_failed_original_unchanged)}
     }
-    fun exportDng(photo: Photo,uri: Uri) {
+    fun exportOriginal(photo: Photo,uri: Uri) {
         verifySource(photo)
         checkNotNull(context.contentResolver.openOutputStream(uri,"w")).use {output->photo.source.inputStream().use {it.copyTo(output,65536)}}
     }

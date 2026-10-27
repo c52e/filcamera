@@ -40,7 +40,7 @@ class GrainRenderGpuTest {
         val source=File(app.filesDir,checkNotNull(relative))
         val hash=PairCaptureStore.hash(source)
         val task=FutureTask {
-            val input=DngEditInput(app)
+            val input=EditInput()
             try {
                 val prepared=input.prepare(source,hash,CaptureTiming(),fullResolution=true,cancelled={false})
                 android.util.Log.i("GrainRenderProbe","retained DNG ${prepared.width}x${prepared.height}")
@@ -49,7 +49,7 @@ class GrainRenderGpuTest {
                 val output=FilmOutput.buffer(prepared.width,prepared.height)
                 val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
                     android.os.SystemClock.elapsedRealtimeNanos(),"",FilmEngine.recordedSeed(prepared.record) ?: 123L,
-                    output,prepared.pixels,prepared.owner.gpuImage))
+                    output,prepared.pixels,prepared.gpuImage))
                 assertFalse(result.getBoolean("cancelled"))
                 assertEquals(hash,PairCaptureStore.hash(source))
                 val jpg=File(app.cacheDir,"grain-retry.jpg")

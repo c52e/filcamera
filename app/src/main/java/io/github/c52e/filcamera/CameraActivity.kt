@@ -7,7 +7,6 @@ import io.github.c52e.filcamera.camera.LocalDiagnostics
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -101,6 +100,12 @@ class CameraActivity: ComponentActivity() {
     val exportDng=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/x-adobe-dng")) {uri->
         ui.photos.firstOrNull {it.id==exportId}?.let {photo->if(uri!=null) model.export(photo,uri)}
     }
+    val exportJpeg=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/jpeg")) {uri->
+        ui.photos.firstOrNull {it.id==exportId}?.let {photo->if(uri!=null) model.export(photo,uri)}
+    }
+    val exportHeic=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/heic")) {uri->
+        ui.photos.firstOrNull {it.id==exportId}?.let {photo->if(uri!=null) model.export(photo,uri)}
+    }
     var editExpanded by rememberSaveable {mutableStateOf(true)}
     LaunchedEffect(page) {LocalDiagnostics.event("UI.page",page);if(page!="edit") editExpanded=true}
     LaunchedEffect(edit.message) {if(edit.message.contains("FILCamera ")) model.message(edit.message)}
@@ -161,7 +166,7 @@ class CameraActivity: ComponentActivity() {
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
             if(page=="camera") {
-                CameraScreen(model,camera,ui.recipe,ui.photos.firstOrNull()?.latest?.file,permission,previewEpoch,landscape,panel,
+                CameraScreen(model,camera,ui.recipe,ui.photos.firstOrNull()?.displayFile,permission,previewEpoch,landscape,panel,
                     openPanel={panel=it},openLibrary={page="library"},capture={model.camera.capture(model.captureOrientation.displayDegreesForCapture(rotation(context)))},
                     requestPermission={permissionRequest.launch(Manifest.permission.CAMERA)},retry={previewEpoch++},notice={notice()})
             } else {
@@ -181,7 +186,7 @@ class CameraActivity: ComponentActivity() {
                         else LazyVerticalGrid(GridCells.Adaptive(110.dp),Modifier.weight(1f),contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                             items(ui.photos,key={it.id}) {entry->Column(Modifier.clipRounded().semantics {contentDescription=tr(Texts.string.open_photo_value, entry.id)}.combinedClickable(enabled=!ui.working,onLongClick={togglePhoto(entry.id)},onLongClickLabel=tr(Texts.string.select_photo),onClick={if(selectedPhotos.isNotEmpty()) togglePhoto(entry.id) else {selectedId=entry.id;versionId=entry.latest?.id.orEmpty();page="photo"}})) {
                                 Box(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xff25272a)).then(if(entry.id in selectedPhotos) Modifier.border(2.dp,Accent) else Modifier),contentAlignment=Alignment.Center) {
-                                    entry.latest?.let {GalleryImage(it,model.repository)} ?: Text(tr(Texts.string.dng_nready_to_develop),color=Accent)
+                                    entry.displayFile?.let {GalleryImage(it,model.repository)} ?: Text(tr(Texts.string.dng_nready_to_develop),color=Accent)
                                     if(selectedPhotos.isNotEmpty()) Checkbox(entry.id in selectedPhotos,{if(!ui.working) togglePhoto(entry.id)},enabled=!ui.working,modifier=Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha=.6f),CircleShape))
                                 }
                                 Text(SimpleDateFormat("MM/dd HH:mm",Locale.getDefault()).format(Date(entry.date)),fontSize=11.sp,color=Muted,modifier=Modifier.padding(6.dp))
@@ -192,7 +197,7 @@ class CameraActivity: ComponentActivity() {
                         if(photo==null) Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) {Text(tr(Texts.string.photo_removed))}
                         else {
                             val photoIndex=ui.photos.indexOfFirst {it.id==photo.id}
-                            key(photo.id) {ZoomPhoto(version?.file,Modifier.weight(1f).fillMaxWidth(),photoIndex>0,photoIndex<ui.photos.lastIndex) {direction->
+                            key(photo.id) {ZoomPhoto(version?.file ?: photo.displayFile,Modifier.weight(1f).fillMaxWidth(),photoIndex>0,photoIndex<ui.photos.lastIndex) {direction->
                                 ui.photos.getOrNull(photoIndex+direction)?.let {target->selectedId=target.id;versionId=target.latest?.id.orEmpty()}
                             }}
                             Column(Modifier.fillMaxWidth().heightIn(max=200.dp).verticalScroll(rememberScrollState()).padding(8.dp)) {
@@ -204,7 +209,7 @@ class CameraActivity: ComponentActivity() {
                             }
                         }
                     }
-                    "edit"-> EditorScreen(edit,version?.file,landscape,editExpanded,{editExpanded=!editExpanded},
+                    "edit"-> EditorScreen(edit,version?.file ?: photo?.displayFile,landscape,editExpanded,{editExpanded=!editExpanded},
                         model.editor::change,::back,::saveCopy,!ui.working && !edit.saving,notice={notice()})
 
                 }
@@ -246,7 +251,7 @@ class CameraActivity: ComponentActivity() {
                         TextButton(onClick={model.publish(version);panel=""}) {Text(tr(Texts.string.save_to_system_gallery))}
                         TextButton(onClick={deletion="version";panel=""}) {Text(tr(Texts.string.delete_this_developed_version))}
                     }
-                    TextButton(onClick={exportId=photo.id;exportDng.launch("FILCamera_${photo.id}.dng");panel=""}) {Text(tr(Texts.string.export_dng_original))}
+                    TextButton(onClick={exportId=photo.id;if(photo.kind=="heic") exportHeic.launch("FILCamera_${photo.id}.heic") else if(photo.kind=="jpeg") exportJpeg.launch("FILCamera_${photo.id}.jpg") else exportDng.launch("FILCamera_${photo.id}.dng");panel=""}) {Text(tr(Texts.string.export_dng_original))}
                     TextButton(onClick={deletion="photo";panel=""}) {Text(tr(Texts.string.delete_original_and_all_versions),color=MaterialTheme.colorScheme.error)}
                 }
             }
@@ -312,18 +317,29 @@ private fun Modifier.clipRounded()=this.then(Modifier.background(Color(0xff25272
         }
     }
 }
-@Composable internal fun PhotoImage(file: File?,modifier: Modifier=Modifier,maxEdge: Int=2048) {
-    val bitmap by produceState<android.graphics.Bitmap?>(null,file?.path,file?.lastModified(),maxEdge) {
-        value=withContext(Dispatchers.IO) {file?.takeIf {it.isFile}?.let {
-            val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true};BitmapFactory.decodeFile(it.path,bounds)
-            var sample=1;while(maxOf(bounds.outWidth,bounds.outHeight)/sample>maxEdge) sample*=2
-            BitmapFactory.decodeFile(it.path,BitmapFactory.Options().apply {inSampleSize=sample})
-        }}
+@Composable internal fun PhotoImage(file: File?,modifier: Modifier=Modifier,maxEdge: Int=2048,loading: Boolean=false) {
+    key(file?.path,file?.lastModified(),maxEdge) {
+        val loaded by produceState<Result<android.graphics.Bitmap>?>(null) {
+            if(file!=null) value=withContext(Dispatchers.IO) {runCatching {BitmapEditInput.decode(file,maxEdge=maxEdge,supportedOnly=false)}}
+        }
+        val bitmap=loaded?.getOrNull()
+        if(bitmap!=null) Image(bitmap.asImageBitmap(),tr(Texts.string.photo),modifier)
+        else PhotoPlaceholder(modifier,loading=(file!=null && loaded==null) || (file==null && loading),failed=loaded?.isFailure==true)
     }
-    bitmap?.let {Image(it.asImageBitmap(),tr(Texts.string.photo),modifier)} ?: Box(modifier,contentAlignment=Alignment.Center) {Text("RAW",color=Muted)}
 }
-@Composable private fun GalleryImage(version: PhotoRepository.Version,repository: PhotoRepository) {
-    var thumbnail by remember(version.file.path) {mutableStateOf<File?>(null)}
-    LaunchedEffect(version.file.path) {thumbnail=withContext(Dispatchers.IO) {runCatching {repository.thumbnail(version)}.getOrNull()}}
-    PhotoImage(thumbnail,Modifier.fillMaxSize(),512)
+@Composable private fun PhotoPlaceholder(modifier: Modifier,loading: Boolean=false,failed: Boolean=false) {
+    Box(modifier,contentAlignment=Alignment.Center) {
+        if(loading) CircularProgressIndicator(Modifier.size(24.dp).semantics {contentDescription=tr(Texts.string.loading_photo)},color=Muted,strokeWidth=2.dp)
+        else Text(tr(if(failed) Texts.string.photo_load_failed else Texts.string.photo_no_preview),color=Muted)
+    }
+}
+@Composable private fun GalleryImage(source: File,repository: PhotoRepository) {
+    key(source.path,source.lastModified()) {
+        val thumbnail by produceState<Result<File>?>(null) {
+            value=withContext(Dispatchers.IO) {runCatching {repository.thumbnail(source)}}
+        }
+        val file=thumbnail?.getOrNull()
+        if(file!=null) PhotoImage(file,Modifier.fillMaxSize(),512)
+        else PhotoPlaceholder(Modifier.fillMaxSize(),loading=thumbnail==null,failed=thumbnail?.isFailure==true)
+    }
 }

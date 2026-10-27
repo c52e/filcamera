@@ -109,8 +109,8 @@
     <string name="photo">"Photo"</string>
     <string name="select_all">"Select all"</string>
     <string name="delete">"Delete"</string>
-    <string name="import_dng">"Import DNG"</string>
-    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"No photos yet\nTake a photo or import a DNG original"</string>
+    <string name="import_dng">"Import DNG / JPG / HEIC"</string>
+    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"No photos yet\nTake a photo or import a DNG / JPG / HEIC original"</string>
     <string name="open_photo_value">"Open photo %1$s"</string>
     <string name="select_photo">"Select photo"</string>
     <string name="dng_nready_to_develop">"DNG\nReady to develop"</string>
@@ -123,8 +123,8 @@
     <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"The selected originals and all developed versions in the app will be permanently deleted. System gallery copies will remain."</string>
     <string name="confirm_delete">"Confirm delete"</string>
     <string name="value_raw_film_camera">"%1$s · RAW film camera"</string>
-    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 photos are saved to the system gallery. DNG originals stay in the app. Export them before uninstalling."</string>
-    <string name="open_library_import_dng">"Open library / Import DNG"</string>
+    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 photos are saved to the system gallery. Originals stay in the app. Export them before uninstalling."</string>
+    <string name="open_library_import_dng">"Open library / Import DNG / JPG / HEIC"</string>
     <string name="open_source_licenses_and_attribution">"Open-source licenses and attribution"</string>
     <string name="developer_options">"Developer options"</string>
     <string name="open_source_licenses">"Open-source licenses"</string>
@@ -137,12 +137,12 @@
     <string name="share_jpg">"Share JPG"</string>
     <string name="save_to_system_gallery">"Save to system gallery"</string>
     <string name="delete_this_developed_version">"Delete this developed version"</string>
-    <string name="export_dng_original">"Export DNG original"</string>
+    <string name="export_dng_original">"Export original"</string>
     <string name="delete_original_and_all_versions">"Delete original and all versions"</string>
     <string name="delete_this_photo">"Delete this photo?"</string>
     <string name="delete_this_version">"Delete this version?"</string>
-    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"The in-app DNG original and all developed versions will be permanently deleted. System gallery copies will remain."</string>
-    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"Only this developed version will be deleted. The DNG original and system gallery copies will remain."</string>
+    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"The in-app original and all developed versions will be permanently deleted. System gallery copies will remain."</string>
+    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"Only this developed version will be deleted. The original and system gallery copies will remain."</string>
     <string name="viewfinder_tap_to_focus_and_meter">"Viewfinder. Tap to focus and meter"</string>
     <string name="focus_and_meter_at_center">"Focus and meter at center"</string>
     <string name="viewfinder_controls">"Viewfinder controls"</string>
@@ -179,7 +179,7 @@
     <string name="camera_exposure_compensation">"Camera exposure compensation"</string>
     <string name="live_viewfinder">"Live viewfinder"</string>
     <string name="let_the_light_in">"Let the light in"</string>
-    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"Allow camera access to take photos, or browse and import DNGs first."</string>
+    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"Allow camera access to take photos, or browse and import DNG / JPG / HEIC first."</string>
     <string name="allow_camera_access">"Allow camera access"</string>
     <string name="open_permission_settings">"Open permission settings"</string>
     <string name="switching_lens_2">"Switching lens…"</string>
@@ -195,8 +195,7 @@
     <string name="could_not_restore_the_last_recipe_using_defaults_value">"Could not restore the last recipe; using defaults: %1$s"</string>
     <string name="could_not_read_library">"Could not read library"</string>
     <string name="operation_failed">"Operation failed"</string>
-    <string name="dng_imported_ready_to_edit_and_develop">"DNG imported; ready to edit and develop"</string>
-    <string name="dng_original_exported">"DNG original exported"</string>
+    <string name="dng_original_exported">"Original exported"</string>
     <string name="saved_to_system_gallery">"Saved to system gallery"</string>
     <string name="in_app_photo_deleted_system_gallery_copies_retained">"In-app photo deleted; system gallery copies retained"</string>
     <string name="deleted_value_photos">"Deleted %1$s photos"</string>
@@ -267,7 +266,7 @@
     <string name="invalid_photo_path">"Invalid photo path"</string>
     <string name="not_enough_storage_free_up_space_first">"Not enough storage. Free up space first"</string>
     <string name="dng_file_is_too_large">"DNG file is too large"</string>
-    <string name="dng_checksum_failed_original_unchanged">"DNG checksum failed; original unchanged"</string>
+    <string name="dng_checksum_failed_original_unchanged">"Checksum failed; original unchanged"</string>
     <string name="test_gallery_write_failed">"Test: gallery write failed"</string>
     <string name="reset">"Reset"</string>
     <string name="reset_white_balance">"Reset white balance"</string>
@@ -294,4 +293,9 @@
     <string name="previous_photo">"Previous photo"</string>
     <string name="next_photo">"Next photo"</string>
     <string name="off">Off</string>
+    <string name="image_file_too_large">"Image file is too large"</string>
+    <string name="loading_photo">"Loading photo"</string>
+    <string name="photo_load_failed">"Could not load photo"</string>
+    <string name="photo_no_preview">"No preview available"</string>
+    <string name="invalid_bitmap_image">"Invalid or unsupported JPEG/HEIC (maximum 60 MP and 16384 pixels per side)"</string>
 </resources>

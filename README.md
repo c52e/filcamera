@@ -8,7 +8,7 @@ preview a film recipe, and develop another version later without losing the orig
 - Camera2 RAW capture and supported rear-camera selection; calculated 35 mm equivalent framing.
 - GPU RAW development, spectral film/paper rendering, grain, halation and diffusion.
 - Device-generated preview LUTs, calibrated Kelvin white balance and tap-to-focus.
-- Photo library, pinch zoom, sharing, DNG export/import and non-destructive darkroom.
+- Photo library, pinch zoom, sharing, DNG/JPG/HEIC original export/import and non-destructive darkroom.
 - English, Simplified Chinese, Traditional Chinese and Japanese UI, selected by the system language. Other languages use English.
 - Offline operation: no account, analytics, advertising or network permission.
 
@@ -48,6 +48,11 @@ capture; the app does not silently substitute JPEG capture.
 
 Preview uses ISP input and a pointwise LUT. It is an approximation of RAW output;
 grain, diffusion, halation and other spatial stages are final-image operations.
+JPG/HEIC import supports editing with the default recipe.
+EXIF orientation and embedded color profiles are handled by Android; editing input is
+converted on the GPU to linear ProPhoto RGB. Originals are retained byte for byte. Images are
+limited to 60 MP and 16384 pixels per side.
+
 DNG import currently accepts the app's embedded development record, not arbitrary
 third-party DNGs. Processing is serial and can take several seconds at full resolution.
 
@@ -81,3 +86,6 @@ MIT / CC BY-SA 3.0 licenses. See [license inventory](THIRD_PARTY_NOTICES.md).
 When distributing a binary, also provide its complete corresponding source and
 build instructions under GPLv3. See [privacy](docs/PRIVACY.md) and
 [contributing](CONTRIBUTING.md).
+
+HEIC uses the device ImageDecoder and the same resident GPU editing pipeline as JPEG.
+The provided 8-bit SDR P3 sample is covered by HeicImportTest; other HEIC/HDR variants require device qualification.

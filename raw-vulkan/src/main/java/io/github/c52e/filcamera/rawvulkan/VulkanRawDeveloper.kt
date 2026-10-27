@@ -89,6 +89,18 @@ class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
     companion object {
         const val ID="vulkan-directional-difference-area-v1"
         init { System.loadLibrary("rawvulkan") }
+        /** Bitmap pixels must already use sRGB primaries and the sRGB transfer curve. */
+        fun convertSrgbBitmap(bitmap: android.graphics.Bitmap,matrix: FloatArray,readbackForTest: Boolean=false): FilmInput {
+            require(RawLimits.supports(bitmap.width,bitmap.height) && matrix.size==9 && matrix.all {it.isFinite()})
+            require(bitmap.colorSpace==android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.SRGB) || bitmap.colorSpace==android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.EXTENDED_SRGB))
+            val storage=if(readbackForTest) NativeBuffer.allocate(bitmap.width*bitmap.height*12) else null
+            var image=0L
+            try {
+                image=convertBitmap(bitmap,matrix,storage?.pixels)
+                return FilmInput(bitmap.width,bitmap.height,storage,image)
+            } catch(e: Throwable) {if(image!=0L) dropImage(image);storage?.close();throw e}
+        }
+        @JvmStatic private external fun convertBitmap(bitmap: android.graphics.Bitmap,matrix: FloatArray,readback: ByteBuffer?): Long
         @JvmStatic private external fun dropImage(image: Long)
     }
 }

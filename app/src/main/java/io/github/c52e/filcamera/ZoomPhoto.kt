@@ -3,7 +3,6 @@ package io.github.c52e.filcamera
 import io.github.c52e.filcamera.strings.tr
 import io.github.c52e.filcamera.strings.R as Texts
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -45,11 +44,11 @@ internal class PhotoPan {
         if(pinched || abs(horizontal)<abs(vertical)*1.25f || abs(excess)<threshold) 0 else if(excess<0) 1 else -1
 }
 
-@Composable internal fun ZoomPhoto(file: File?,modifier: Modifier,previous: Boolean,next: Boolean,zoomKey: Any?=file,onNavigate: (Int)->Unit) {
+@Composable internal fun ZoomPhoto(file: File?,modifier: Modifier,previous: Boolean,next: Boolean,zoomKey: Any?=file,loading: Boolean=false,onNavigate: (Int)->Unit) {
     val imageSize by produceState(1f to 1f,file) {
-        value=withContext(Dispatchers.IO) {val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true}
-            if(file!=null) BitmapFactory.decodeFile(file.path,bounds)
-            bounds.outWidth.coerceAtLeast(1).toFloat() to bounds.outHeight.coerceAtLeast(1).toFloat()}
+        value=withContext(Dispatchers.IO) {
+            file?.let {runCatching {BitmapEditInput.dimensions(it)}.getOrNull()}?.let {it.first.toFloat() to it.second.toFloat()} ?: (1f to 1f)
+        }
     }
     var transform by remember(zoomKey) {mutableStateOf(Triple(1f,0f,0f))}
     val navigate by rememberUpdatedState(onNavigate)
@@ -87,6 +86,6 @@ internal class PhotoPan {
             } while(event.changes.any {it.pressed})
         }
     }) {
-        PhotoImage(file,Modifier.fillMaxSize().graphicsLayer(scaleX=transform.first,scaleY=transform.first,translationX=transform.second,translationY=transform.third))
+        PhotoImage(file,Modifier.fillMaxSize().graphicsLayer(scaleX=transform.first,scaleY=transform.first,translationX=transform.second,translationY=transform.third),loading=loading)
     }
 }

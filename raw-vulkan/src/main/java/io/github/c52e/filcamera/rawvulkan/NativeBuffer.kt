@@ -18,11 +18,13 @@ class NativeBuffer private constructor(val pixels: ByteBuffer,private val lease:
             Thread({while(true) {val ref=queue.remove();@Suppress("UNCHECKED_CAST") release(ref as PhantomReference<ByteBuffer>)}},"RawBufferReaper").apply {isDaemon=true;start()}
         }
         private fun release(ref: PhantomReference<ByteBuffer>) {val pointer=synchronized(allocations) {allocations.remove(ref)};if(pointer!=null) free(pointer);ref.clear()}
-        fun allocate(bytes: Int): NativeBuffer {
+        fun allocate(bytes: Int,initialize: (ByteBuffer)->Unit={}): NativeBuffer {
             require(bytes>0 && bytes<=RawLimits.MAX_PIXELS*12)
             val pointer=allocateNative(bytes)
             try {
-                val pixels=view(pointer,bytes).asReadOnlyBuffer().order(ByteOrder.nativeOrder())
+                val writable=view(pointer,bytes).order(ByteOrder.nativeOrder())
+                initialize(writable)
+                val pixels=writable.asReadOnlyBuffer().order(ByteOrder.nativeOrder())
                 val ref=PhantomReference(pixels,queue)
                 synchronized(allocations) {allocations[ref]=pointer}
                 return NativeBuffer(pixels,ref)

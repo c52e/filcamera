@@ -26,7 +26,7 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
     private var pending=false
     @Volatile private var active=false
     val isOpen get()=active
-    private val input=DngEditInput(context)
+    private val input=EditInput()
     init {FilmWorker.execute {
         if(!cleaned) {
             context.cacheDir.listFiles()?.filter {it.isFile && it.name.matches(Regex("edit-preview-[0-9a-f-]{36}\\.jpg(\\.pending)?"))}?.forEach {it.delete()}
@@ -64,11 +64,11 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 val assets=PreviewLutStore(context).prepareAssets(::current)
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,requested,id,"",seed,rgba,prepared.pixels,prepared.owner.gpuImage,cacheFilm=true))}
+                val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,requested,id,"",seed,rgba,prepared.pixels,prepared.gpuImage,cacheFilm=true))}
                 if(result.getBoolean("cancelled") || !current()) throw InterruptedException()
                 val encoding=timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
                 result.put("output",PhotoOutput.metadata(file,encoding))
-                rendered=result.put("input",JSONObject().put("kind","dng").put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
+                rendered=result.put("input",JSONObject().put("kind",original.kind).put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
                     .put("framing",prepared.framing.json()).put("renderQuality","editing-preview").put("timing",timing.json()).put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use {it.readText()}))
             } catch(e: OutOfMemoryError) {input.close();FilmEngine.close();error=LocalDiagnostics.failure("EDIT-003","editor-memory",tr(Texts.string.out_of_memory_original_and_previous_result_retained),e)}
             catch(e: InterruptedException) { /* Parameter changes reuse the prepared RAW input. Page close releases it on FilmWorker. */ }
@@ -104,12 +104,12 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 val assets=PreviewLutStore(context).prepareAssets {true}
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                val rendered=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,frozen,SystemClock.elapsedRealtimeNanos(),"",seed,rgba,prepared.pixels,prepared.owner.gpuImage))}
+                val rendered=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,frozen,SystemClock.elapsedRealtimeNanos(),"",seed,rgba,prepared.pixels,prepared.gpuImage))}
                 check(!rendered.getBoolean("cancelled"))
                 val encoding=timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
                 rendered.put("output",PhotoOutput.metadata(file,encoding))
                 rendered.put("framing",prepared.framing.json()).put("renderQuality","final").put("width",prepared.width).put("height",prepared.height)
-                    .put("input",JSONObject().put("kind","dng").put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
+                    .put("input",JSONObject().put("kind",original.kind).put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
                     .put("timing",timing.json()).put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use {it.readText()}))
                 result=repository.saveEdit(original,file,rendered)
                 try {repository.publish(result)} catch(e: Exception) {error=LocalDiagnostics.failure("SAVE-002","gallery-save",tr(Texts.string.copy_retained_gallery_save_failed_you_can_retry),e)}

@@ -22,7 +22,7 @@ class GpuFilmCacheTest {
         val task=FutureTask {
             val source=File(app.filesDir,checkNotNull(relative))
             val sourceHash=PairCaptureStore.hash(source)
-            val input=DngEditInput(app)
+            val input=EditInput()
             val rows=JSONArray()
             val report=JSONObject().put("model",Build.MODEL).put("hardware",Build.HARDWARE)
                 .put("sourceSha256",sourceHash).put("runs",rows)
@@ -33,7 +33,7 @@ class GpuFilmCacheTest {
             var output=FilmOutput.buffer(prepared.width,prepared.height)
             fun render(label: String,recipe: FilmRecipe=base,seed: Long=123,enabled: Boolean=true): JSONObject {
                 val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
-                    SystemClock.elapsedRealtimeNanos(),"",seed,output,prepared.pixels,prepared.owner.gpuImage,cacheFilm=enabled))
+                    SystemClock.elapsedRealtimeNanos(),"",seed,output,prepared.pixels,prepared.gpuImage,cacheFilm=enabled))
                 check(!result.getBoolean("cancelled"))
                 val digest=MessageDigest.getInstance("SHA-256")
                 digest.update(output.duplicate().apply {clear()})

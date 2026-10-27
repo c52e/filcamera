@@ -53,3 +53,32 @@ Optional device checks:
   installed signed release through accessibility. Grant that app camera permission
   first. The test creates a real photo and verifies its library entry; it keeps
   the photo. These optional tests are skipped in ordinary instrumentation runs.
+
+- `JpegImportTest` uses synthetic JPEGs to check import/catalog persistence, default
+  recipes, reproducible rendering, save/export integrity, all eight EXIF orientations,
+  corrupt-file rejection, sRGB/Display P3 color conversion and cancellation. Run with
+  `-Pandroid.testInstrumentationRunnerArguments.class=io.github.c52e.filcamera.JpegImportTest`.
+- `JpegGpuCacheTest#cacheParityInvalidationAndCleanup` checks resident bitmap GPU
+  conversion, zero image uploads during rendering, exact CPU-upload/resident transport
+  parity on the same GPU route, the existing numerical gates against the old host
+  spatial route, exact cached/uncached output, film/seed/source invalidation,
+  cancellation after conversion, dispatch failure and resource release. Invalid
+  bitmap samples are covered by `BitmapGpuConversionTest`.
+  `#realJpegPreviewCachePerformance`, enabled with `jpegCachePerformance=true`, uses
+  `cache/jpeg-performance-input.jpg` and writes `cache/jpeg-gpu-cache-performance.json`.
+  It runs only the editing preview resolution (at most 3 MP), with three paired
+  cache-off/prime/print-edit-hit runs, and never renders the full-resolution source.
+
+- `HeicImportTest`, enabled with `heicImport=true`, reads the supplied sample from
+  `cache/heic-input.heic`. It checks the complete 4096x3072 tiled image, orientation
+  dimensions, P3 conversion, GPU cache parity, save/export
+  integrity and release. Renders use only the <=3 MP editing preview.
+
+- `BitmapGpuConversionTest` compares RGBA8888 and extended-sRGB RGBAF16 ramps
+  (negative values, transfer-curve boundaries and values above one) to the Android
+  ColorSpace CPU oracle, with maximum linear error <=5e-6, and verifies invalid
+  input cleanup. CPU pixel conversion exists only in instrumentation.
+- `BitmapGpuPerformanceTest`, enabled with `bitmapGpuPerformance=true`, compares
+  three paired CPU-oracle/GPU preparations for `cache/jpeg-performance-input.jpg`
+  and `cache/heic-input.heic`, exclusively at <=3 MP preview resolution. It writes
+  `cache/bitmap-gpu-performance.json`. This does not run full-resolution renders.

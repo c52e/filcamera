@@ -109,8 +109,8 @@
     <string name="photo">"照片"</string>
     <string name="select_all">"全選"</string>
     <string name="delete">"刪除"</string>
-    <string name="import_dng">"匯入 DNG"</string>
-    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"還沒有照片\n拍下第一張，或匯入 DNG 原片"</string>
+    <string name="import_dng">"匯入 DNG / JPG / HEIC"</string>
+    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"還沒有照片\n拍下第一張，或匯入 DNG / JPG / HEIC 原片"</string>
     <string name="open_photo_value">"開啟照片 %1$s"</string>
     <string name="select_photo">"選擇照片"</string>
     <string name="dng_nready_to_develop">"DNG\n可重新顯影"</string>
@@ -120,11 +120,11 @@
     <string name="edit_and_develop">"調整並重顯影"</string>
     <string name="more">"更多"</string>
     <string name="delete_value_photos">"刪除 %1$s 張照片？"</string>
-    <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"將刪除所選照片在 App 內的 DNG 原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
+    <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"將刪除所選照片在 App 內的原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
     <string name="confirm_delete">"確認刪除"</string>
     <string name="value_raw_film_camera">"%1$s · RAW 底片相機"</string>
-    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 自動儲存系統相簿。DNG 原片儲存在 App 內，解除安裝前請先匯出。"</string>
-    <string name="open_library_import_dng">"開啟照片庫 / 匯入 DNG"</string>
+    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 自動儲存系統相簿。原片儲存在 App 內，解除安裝前請先匯出。"</string>
+    <string name="open_library_import_dng">"開啟照片庫 / 匯入 DNG / JPG / HEIC"</string>
     <string name="open_source_licenses_and_attribution">"開源授權與資料歸屬"</string>
     <string name="developer_options">"開發者選項"</string>
     <string name="open_source_licenses">"開源授權"</string>
@@ -137,12 +137,12 @@
     <string name="share_jpg">"分享 JPG"</string>
     <string name="save_to_system_gallery">"儲存到系統相簿"</string>
     <string name="delete_this_developed_version">"刪除當前成片版本"</string>
-    <string name="export_dng_original">"匯出 DNG 原片"</string>
+    <string name="export_dng_original">"匯出原片"</string>
     <string name="delete_original_and_all_versions">"刪除原片與全部版本"</string>
     <string name="delete_this_photo">"刪除整張照片？"</string>
     <string name="delete_this_version">"刪除當前版本？"</string>
-    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"將刪除 App 內 DNG 原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
-    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"只刪除當前成片，DNG 原片保留。系統相簿副本不受影響。"</string>
+    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"將刪除 App 內的原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
+    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"只刪除當前成片，原片保留。系統相簿副本不受影響。"</string>
     <string name="viewfinder_tap_to_focus_and_meter">"取景畫面，點選對焦與測光"</string>
     <string name="focus_and_meter_at_center">"中央對焦與測光"</string>
     <string name="viewfinder_controls">"取景參數面板"</string>
@@ -179,7 +179,7 @@
     <string name="camera_exposure_compensation">"相機曝光補償"</string>
     <string name="live_viewfinder">"即時取景區域"</string>
     <string name="let_the_light_in">"讓光線進入"</string>
-    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"允許使用相機即可拍攝，也可以先瀏覽照片或匯入 DNG。"</string>
+    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"允許使用相機即可拍攝，也可以先瀏覽照片或匯入 DNG / JPG / HEIC。"</string>
     <string name="allow_camera_access">"允許使用相機"</string>
     <string name="open_permission_settings">"開啟權限設定"</string>
     <string name="switching_lens_2">"正在切換鏡頭…"</string>
@@ -195,8 +195,7 @@
     <string name="could_not_restore_the_last_recipe_using_defaults_value">"無法恢復上次配方，暫用預設值：%1$s"</string>
     <string name="could_not_read_library">"照片庫讀取失敗"</string>
     <string name="operation_failed">"操作失敗"</string>
-    <string name="dng_imported_ready_to_edit_and_develop">"DNG 已匯入，可調整並顯影"</string>
-    <string name="dng_original_exported">"DNG 原片已匯出"</string>
+    <string name="dng_original_exported">"原片已匯出"</string>
     <string name="saved_to_system_gallery">"已儲存至系統相簿"</string>
     <string name="in_app_photo_deleted_system_gallery_copies_retained">"已刪除 App 內照片；系統相簿副本保留"</string>
     <string name="deleted_value_photos">"已刪除 %1$s 張照片"</string>
@@ -267,7 +266,7 @@
     <string name="invalid_photo_path">"照片路徑無效"</string>
     <string name="not_enough_storage_free_up_space_first">"空間不足，請先釋放儲存空間"</string>
     <string name="dng_file_is_too_large">"DNG 檔案過大"</string>
-    <string name="dng_checksum_failed_original_unchanged">"DNG 校驗失敗，原片未修改"</string>
+    <string name="dng_checksum_failed_original_unchanged">"校驗失敗，原片未修改"</string>
     <string name="test_gallery_write_failed">"測試：相簿寫入失敗"</string>
     <string name="reset">"重設"</string>
     <string name="reset_white_balance">"白平衡重設"</string>
@@ -294,4 +293,9 @@
     <string name="previous_photo">"上一張"</string>
     <string name="next_photo">"下一張"</string>
     <string name="off">關閉</string>
+    <string name="image_file_too_large">"圖片檔案過大"</string>
+    <string name="loading_photo">"正在載入照片"</string>
+    <string name="photo_load_failed">"照片載入失敗"</string>
+    <string name="photo_no_preview">"暫無預覽"</string>
+    <string name="invalid_bitmap_image">"JPEG/HEIC 無效或不受支援（最多 6000 萬像素，單邊不超過 16384 像素）"</string>
 </resources>

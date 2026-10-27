@@ -108,8 +108,8 @@
     <string name="photo">"照片"</string>
     <string name="select_all">"全选"</string>
     <string name="delete">"删除"</string>
-    <string name="import_dng">"导入 DNG"</string>
-    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"还没有照片\n拍下第一张，或导入 DNG 原片"</string>
+    <string name="import_dng">"导入 DNG / JPG / HEIC"</string>
+    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"还没有照片\n拍下第一张，或导入 DNG / JPG / HEIC 原片"</string>
     <string name="open_photo_value">"打开照片 %1$s"</string>
     <string name="select_photo">"选择照片"</string>
     <string name="dng_nready_to_develop">"DNG\n可重新显影"</string>
@@ -119,11 +119,11 @@
     <string name="edit_and_develop">"调整并重显影"</string>
     <string name="more">"更多"</string>
     <string name="delete_value_photos">"删除 %1$s 张照片？"</string>
-    <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"将删除所选照片在 App 内的 DNG 原片和全部成片版本，无法撤销。系统相册副本保留。"</string>
+    <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"将删除所选照片在 App 内的原片和全部成片版本，无法撤销。系统相册副本保留。"</string>
     <string name="confirm_delete">"确认删除"</string>
     <string name="value_raw_film_camera">"%1$s · RAW 胶片相机"</string>
-    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 自动保存系统相册。DNG 原片保存在 App 内，卸载前请先导出。"</string>
-    <string name="open_library_import_dng">"打开照片库 / 导入 DNG"</string>
+    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 自动保存系统相册。原片保存在 App 内，卸载前请先导出。"</string>
+    <string name="open_library_import_dng">"打开照片库 / 导入 DNG / JPG / HEIC"</string>
     <string name="open_source_licenses_and_attribution">"开源许可与数据归属"</string>
     <string name="developer_options">"开发者选项"</string>
     <string name="open_source_licenses">"开源许可"</string>
@@ -136,12 +136,12 @@
     <string name="share_jpg">"分享 JPG"</string>
     <string name="save_to_system_gallery">"保存到系统相册"</string>
     <string name="delete_this_developed_version">"删除当前成片版本"</string>
-    <string name="export_dng_original">"导出 DNG 原片"</string>
+    <string name="export_dng_original">"导出原片"</string>
     <string name="delete_original_and_all_versions">"删除原片与全部版本"</string>
     <string name="delete_this_photo">"删除整张照片？"</string>
     <string name="delete_this_version">"删除当前版本？"</string>
-    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"将删除 App 内 DNG 原片和全部成片版本，无法撤销。系统相册副本保留。"</string>
-    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"只删除当前成片，DNG 原片保留。系统相册副本不受影响。"</string>
+    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"将删除 App 内的原片和全部成片版本，无法撤销。系统相册副本保留。"</string>
+    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"只删除当前成片，原片保留。系统相册副本不受影响。"</string>
     <string name="viewfinder_tap_to_focus_and_meter">"取景画面，点击对焦与测光"</string>
     <string name="focus_and_meter_at_center">"中央对焦与测光"</string>
     <string name="viewfinder_controls">"取景参数面板"</string>
@@ -178,7 +178,7 @@
     <string name="camera_exposure_compensation">"相机曝光补偿"</string>
     <string name="live_viewfinder">"实时取景区域"</string>
     <string name="let_the_light_in">"让光线进入"</string>
-    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"允许使用相机即可拍摄，也可以先浏览照片或导入 DNG。"</string>
+    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"允许使用相机即可拍摄，也可以先浏览照片或导入 DNG / JPG / HEIC。"</string>
     <string name="allow_camera_access">"允许使用相机"</string>
     <string name="open_permission_settings">"打开权限设置"</string>
     <string name="switching_lens_2">"正在切换镜头…"</string>
@@ -194,8 +194,7 @@
     <string name="could_not_restore_the_last_recipe_using_defaults_value">"无法恢复上次配方，暂用默认值：%1$s"</string>
     <string name="could_not_read_library">"照片库读取失败"</string>
     <string name="operation_failed">"操作失败"</string>
-    <string name="dng_imported_ready_to_edit_and_develop">"DNG 已导入，可调整并显影"</string>
-    <string name="dng_original_exported">"DNG 原片已导出"</string>
+    <string name="dng_original_exported">"原片已导出"</string>
     <string name="saved_to_system_gallery">"已保存至系统相册"</string>
     <string name="in_app_photo_deleted_system_gallery_copies_retained">"已删除 App 内照片；系统相册副本保留"</string>
     <string name="deleted_value_photos">"已删除 %1$s 张照片"</string>
@@ -266,7 +265,7 @@
     <string name="invalid_photo_path">"照片路径无效"</string>
     <string name="not_enough_storage_free_up_space_first">"空间不足，请先释放存储空间"</string>
     <string name="dng_file_is_too_large">"DNG 文件过大"</string>
-    <string name="dng_checksum_failed_original_unchanged">"DNG 校验失败，原片未修改"</string>
+    <string name="dng_checksum_failed_original_unchanged">"校验失败，原片未修改"</string>
     <string name="test_gallery_write_failed">"测试：相册写入失败"</string>
     <string name="reset">"复位"</string>
     <string name="reset_white_balance">"白平衡复位"</string>
@@ -293,4 +292,9 @@
     <string name="previous_photo">"上一张"</string>
     <string name="next_photo">"下一张"</string>
     <string name="off">关闭</string>
+    <string name="image_file_too_large">"图片文件过大"</string>
+    <string name="loading_photo">"正在加载照片"</string>
+    <string name="photo_load_failed">"照片加载失败"</string>
+    <string name="photo_no_preview">"暂无预览"</string>
+    <string name="invalid_bitmap_image">"JPEG/HEIC 无效或不受支持（最多 6000 万像素，单边不超过 16384 像素）"</string>
 </resources>

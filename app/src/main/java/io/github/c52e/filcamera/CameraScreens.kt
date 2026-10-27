@@ -163,7 +163,7 @@ import java.io.File
         val panelWidth=if(expanded) (maxWidth*.32f).coerceIn(240.dp,288.dp) else 56.dp
         ImageWorkspace(landscape,panelWidth,if(expanded) minOf(280.dp,maxOf(192.dp,maxHeight*.32f),maxHeight*.55f) else 0.dp,
             image={Box(Modifier.fillMaxSize()) {
-                ZoomPhoto(edit.file ?: fallback,Modifier.fillMaxSize(),false,false,zoomSession) {}
+                ZoomPhoto(edit.file ?: fallback,Modifier.fillMaxSize(),false,false,zoomSession,loading=edit.busy || edit.saving) {}
                 Box(Modifier.align(Alignment.TopCenter).padding(top=8.dp)) {notice()}
             }},
             header={if(!landscape) Row(Modifier.fillMaxWidth().padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {

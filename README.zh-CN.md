@@ -41,7 +41,9 @@ python tools/audit_public.py
 需要 Android 10+、Vulkan 1.1 和支持的 Bayer RAW 模式，有效像素不超过 6000 万。
 历史版本主要在小米 15 Pro 上验证，其他设备需要实测。系统未公开的镜头无法使用。
 预览基于 ISP 和 LUT，与 RAW 成片存在差异；空间效果只用于成片。
-导入仅支持带本 App 显影记录的 DNG，暂不支持任意第三方 DNG。全尺寸处理可能需要数秒。
+支持导入 JPG/HEIC，使用默认胶片配方。由 Android 处理 EXIF 方向及内嵌色彩配置，
+编辑输入在 GPU 上转换为线性 ProPhoto RGB，原文件完整保留；最多 6000 万像素，单边不超过 16384 像素。
+DNG 导入仅支持带本 App 显影记录的文件，暂不支持任意第三方 DNG。全尺寸处理可能需要数秒。
 
 ## 开源与隐私
 
@@ -52,3 +54,5 @@ python tools/audit_public.py
 应用原片位于私有目录，卸载前应导出；系统相册副本独立保留。
 
 [架构](docs/ARCHITECTURE.md) · [构建](docs/BUILD.md) · [测试](docs/TESTING.md) · [隐私](docs/PRIVACY.md)
+
+HEIC 使用设备系统解码器及与 JPG 相同的 GPU 编辑链路。优先验证 8 bit SDR P3 样片，其他 HEIC/HDR 变体需单独验证。
