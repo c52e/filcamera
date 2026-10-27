@@ -9,11 +9,10 @@ import android.net.Uri
 import android.provider.MediaStore
 import io.github.c52e.filcamera.rawvulkan.DngRawFile
 import org.json.JSONObject
-import org.json.JSONArray
 import java.io.File
 import java.util.UUID
 
-/** Files are authoritative; catalog and thumbnails may always be rebuilt. All IO on FilmWorker. */
+/** Files are authoritative; thumbnails may always be rebuilt. All IO on FilmWorker. */
 class PhotoRepository(private val context: Context) {
     data class Version(val id: String,val file: File,val record: File)
     data class Photo(val id: String,val source: File,val record: File,val date: Long,val versions: List<Version>) {
@@ -58,11 +57,7 @@ class PhotoRepository(private val context: Context) {
             val source=inside(File(lab,entry.getString("file")))
             add("import_"+record.nameWithoutExtension,source,record,null)
         }
-        val sorted=result.sortedByDescending {it.date}
-        atomic(File(lab,"catalog.json"),JSONObject().put("schema",1).put("photos",JSONArray(sorted.map {
-            JSONObject().put("id",it.id).put("source",it.source.relativeTo(lab).invariantSeparatorsPath).put("date",it.date)
-        })))
-        return sorted
+        return result.sortedByDescending {it.date}
     }
     fun captureRecipe(photo: Photo): FilmRecipe {
         val record=json(photo.record) ?: if(photo.kind=="dng") DngRawFile.read(photo.source).record else JSONObject().put("recipe",FilmRecipe().json())
@@ -150,10 +145,12 @@ class PhotoRepository(private val context: Context) {
             return Photo("import_$id",source,record,record.lastModified(),emptyList())
         } catch(e: Exception) {source.delete();record.delete();throw e} finally {pending.delete()}
     }
-    fun verifySource(photo: Photo) {
+    fun verifySource(photo: Photo): String {
         val record=json(photo.record)
         val expected=record?.optString("sha256")?.takeIf {it.isNotBlank()} ?: record?.optJSONObject("files")?.optString("original.dng")?.takeIf {it.isNotBlank()}
-        if(expected!=null) require(PairCaptureStore.hash(photo.source)==expected) {tr(Texts.string.dng_checksum_failed_original_unchanged)}
+        val actual=PairCaptureStore.hash(photo.source)
+        if(expected!=null) require(actual==expected) {tr(Texts.string.dng_checksum_failed_original_unchanged)}
+        return actual
     }
     fun exportOriginal(photo: Photo,uri: Uri) {
         verifySource(photo)

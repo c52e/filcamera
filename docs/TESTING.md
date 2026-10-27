@@ -54,7 +54,7 @@ Optional device checks:
   first. The test creates a real photo and verifies its library entry; it keeps
   the photo. These optional tests are skipped in ordinary instrumentation runs.
 
-- `JpegImportTest` uses synthetic JPEGs to check import/catalog persistence, default
+- `JpegImportTest` uses synthetic JPEGs to check import/library reload, default
   recipes, reproducible rendering, save/export integrity, all eight EXIF orientations,
   corrupt-file rejection, sRGB/Display P3 color conversion and cancellation. Run with
   `-Pandroid.testInstrumentationRunnerArguments.class=io.github.c52e.filcamera.JpegImportTest`.

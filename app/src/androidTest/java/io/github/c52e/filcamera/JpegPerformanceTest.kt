@@ -37,8 +37,7 @@ class JpegPerformanceTest {
                     FilmEngine.close()
                     val timing=CaptureTiming()
                     try {
-                        timing.stage("inputVerify") {repository.verifySource(photo)}
-                        val hash=timing.stage("sourceHash") {PairCaptureStore.hash(photo.source)}
+                        val hash=timing.stage("inputVerify") {repository.verifySource(photo)}
                         val prepared=input.prepare(photo.source,hash,timing,full,{false})
                         val assets=timing.stage("assets") {PreviewLutStore(app).prepareAssets {true}}
                         val rgba=timing.stage("outputAllocation") {FilmOutput.buffer(prepared.width,prepared.height)}

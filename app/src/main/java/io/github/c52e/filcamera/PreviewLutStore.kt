@@ -97,10 +97,9 @@ class PreviewLutStore(private val context: Context, private val root: File=File(
                 file.parentFile!!.mkdirs();val pending=File(file.parentFile,file.name+".lut-pending")
                 try {
                     context.assets.open("lab/assets/$name").use { input -> pending.outputStream().use { input.copyTo(it) } }
-                    require(PairCaptureStore.hash(pending)==expected);check(pending.renameTo(file))
+                    require(PairCaptureStore.hash(pending)==expected) { "Profile checksum mismatch: $name" };check(pending.renameTo(file))
                 } finally { pending.delete() }
             }
-            require(PairCaptureStore.hash(file)==expected) { "Profile checksum mismatch: $name" }
         }
         return root
     }

@@ -35,7 +35,6 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
     }}
     companion object {private var cleaned=false} // Accessed exclusively on FilmWorker.
 
-    private var details: JSONObject?=null
     private val later=Runnable {if(running) pending=true else render()}
     fun open(value: PhotoRepository.Photo,recipe: FilmRecipe) {
         LocalDiagnostics.event("EDIT.open")
@@ -55,28 +54,26 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
         val file=File(context.cacheDir,"edit-preview-${UUID.randomUUID()}.jpg")
         fun current()=active && generation==gen
         FilmWorker.execute {
-            var rendered: JSONObject?=null;var error: String?=null
+            var rendered=false;var error: String?=null
             try {
                 if(!current()) throw InterruptedException()
                 val timing=CaptureTiming()
-                timing.stage("inputVerify") {repository.verifySource(original)}
-                val prepared=input.prepare(original.source,PairCaptureStore.hash(original.source),timing,cancelled={!current()})
+                val hash=timing.stage("inputVerify") {repository.verifySource(original)}
+                val prepared=input.prepare(original.source,hash,timing,cancelled={!current()})
                 val assets=PreviewLutStore(context).prepareAssets(::current)
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
                 val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,requested,id,"",seed,rgba,prepared.pixels,prepared.gpuImage,cacheFilm=true))}
                 if(result.getBoolean("cancelled") || !current()) throw InterruptedException()
-                val encoding=timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
-                result.put("output",PhotoOutput.metadata(file,encoding))
-                rendered=result.put("input",JSONObject().put("kind",original.kind).put("file",original.source.relativeTo(File(context.filesDir,"lab")).invariantSeparatorsPath))
-                    .put("framing",prepared.framing.json()).put("renderQuality","editing-preview").put("timing",timing.json()).put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use {it.readText()}))
+                timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
+                rendered=true
             } catch(e: OutOfMemoryError) {input.close();FilmEngine.close();error=LocalDiagnostics.failure("EDIT-003","editor-memory",tr(Texts.string.out_of_memory_original_and_previous_result_retained),e)}
             catch(e: InterruptedException) { /* Parameter changes reuse the prepared RAW input. Page close releases it on FilmWorker. */ }
             catch(e: Exception) {input.close();FilmEngine.close();error=LocalDiagnostics.failure("EDIT-002","editor-render",e.message ?: tr(Texts.string.development_failed),e,"generation=$gen")}
             main.post {
                 running=false
-                if(current() && rendered!=null) {
-                    mutable.value.file?.delete();details=rendered
+                if(current() && rendered) {
+                    mutable.value.file?.delete()
                     mutable.value=mutable.value.copy(file=file,resultHash=requested.hash,busy=false,message="")
                 } else {
                     file.delete()
@@ -88,7 +85,7 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
     }
     fun save(done: (PhotoRepository.Version?,String?)->Unit) {
         val original=photo ?: return;val s=mutable.value
-        if(s.busy || s.resultHash!=s.recipe.hash || s.file==null || details==null) return
+        if(s.busy || s.resultHash!=s.recipe.hash || s.file==null) return
         val frozen=s.recipe;val gen=generation
         LocalDiagnostics.event("EDIT.save")
         mutable.value=s.copy(busy=true,saving=true,message=tr(Texts.string.saving_copy))
@@ -97,10 +94,10 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
             val file=File(context.cacheDir,"edit-final-${UUID.randomUUID()}.jpg")
             try {
                 val timing=CaptureTiming()
-                timing.stage("inputVerify") {repository.verifySource(original)}
+                val hash=timing.stage("inputVerify") {repository.verifySource(original)}
                 // This explicit save owns its request independently of cancelled editing previews.
                 input.close()
-                val prepared=input.prepare(original.source,PairCaptureStore.hash(original.source),timing,true,{false})
+                val prepared=input.prepare(original.source,hash,timing,true,{false})
                 val assets=PreviewLutStore(context).prepareAssets {true}
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
@@ -128,6 +125,6 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
         active=false;generation++;pending=false;main.removeCallbacks(later)
         if(nativeRequest>0) FilmEngine.cancel(nativeRequest)
         val previous=mutable.value.file;mutable.value=mutable.value.copy(file=null,busy=false,saving=false)
-        FilmWorker.execute {input.close();FilmEngine.close();previous?.delete()};photo=null;details=null
+        FilmWorker.execute {input.close();FilmEngine.close();previous?.delete()};photo=null
     }
 }

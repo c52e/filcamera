@@ -13,6 +13,7 @@ import org.junit.Test
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 
@@ -26,6 +27,40 @@ class JpegImportTest {
     }
     private fun worker(action: ()->Unit) {
         val task=FutureTask(Callable {action()});FilmWorker.execute {task.run()};task.get(120,TimeUnit.SECONDS)
+    }
+    @Test fun editingPreviewCanBeSavedAndOriginalIsVerified() {
+        val file=fixture();val repository=PhotoRepository(context).apply {failPublish=true}
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        lateinit var photo: PhotoRepository.Photo
+        var session: EditSession?=null
+        worker {photo=repository.importPhoto(Uri.fromFile(file))}
+        try {
+            instrumentation.runOnMainSync {session=EditSession(context,repository).also {it.open(photo,FilmRecipe())}}
+            val editing=checkNotNull(session)
+            val deadline=SystemClock.elapsedRealtime()+30_000
+            while(editing.state.value.busy && SystemClock.elapsedRealtime()<deadline) SystemClock.sleep(20)
+            val preview=editing.state.value
+            assertFalse(preview.message,preview.busy)
+            assertNotNull(preview.file)
+            assertEquals(preview.recipe.hash,preview.resultHash)
+            val finished=CountDownLatch(1)
+            var version: PhotoRepository.Version?=null
+            instrumentation.runOnMainSync {editing.save {saved,_->version=saved;finished.countDown()}}
+            assertTrue("Save did not finish",finished.await(30,TimeUnit.SECONDS))
+            val record=JSONObject(checkNotNull(version).record.readText())
+            assertEquals("final",record.getString("renderQuality"))
+            assertEquals("jpeg",record.getJSONObject("input").getString("kind"))
+            assertTrue(record.has("engineIdentity"));assertTrue(record.has("timing"))
+            worker {
+                assertEquals(PairCaptureStore.hash(file),repository.verifySource(photo))
+                photo.source.appendBytes(byteArrayOf(0))
+                assertTrue(runCatching {repository.verifySource(photo)}.exceptionOrNull() is IllegalArgumentException)
+            }
+        } finally {
+            session?.let {editing->instrumentation.runOnMainSync {editing.close()}}
+            worker {repository.scan().firstOrNull {it.id==photo.id}?.let(repository::deletePhoto)}
+            file.delete()
+        }
     }
     @Test fun importRenderSaveExportAndReload()=worker {
         val file=fixture();val repository=PhotoRepository(context);val input=EditInput()
