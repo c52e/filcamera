@@ -48,7 +48,7 @@ def prepare():
         shutil.copy2(file, destination)
     sources = {p.relative_to(ROOT).as_posix(): sha(p) for p in source.rglob("*") if p.is_file()}
     identity = dict(schema=1, product="FILCamera", librarySha256=sha(lib),
-                    buildTools={name: sha(ROOT / name) for name in ["tools/build.py", "tools/build_raw_vulkan.py", "tools/build_support.py"]},
+                    buildTools={name: sha(ROOT / name) for name in ["tools/build.py", "tools/build_raw_vulkan.py", "tools/build_support.py", "tools/optimize_spirv_include.py"]},
                     runtimeSha256=raw["runtimeSha256"], assets=inventory,
                     engineManifestSha256=sha(source / "engine/ORIGIN.json"),
                     recipeAdapterSha256=sha(ROOT / "app/src/main/java/io/github/c52e/filcamera/FilmStocks.kt"),

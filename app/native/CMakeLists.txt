@@ -8,9 +8,11 @@ set(SHADERS "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 file(MAKE_DIRECTORY "${SHADERS}")
 find_program(GLSLC NAMES glslc.exe glslc HINTS "${ANDROID_NDK}/shader-tools/windows-x86_64" "${ANDROID_NDK}/shader-tools/linux-x86_64" "${ANDROID_NDK}/shader-tools/darwin-x86_64" REQUIRED)
 find_program(SPIRV_VAL NAMES spirv-val.exe spirv-val HINTS "${ANDROID_NDK}/shader-tools/windows-x86_64" "${ANDROID_NDK}/shader-tools/linux-x86_64" "${ANDROID_NDK}/shader-tools/darwin-x86_64" REQUIRED)
+find_program(SPIRV_OPT NAMES spirv-opt.exe spirv-opt HINTS "${ANDROID_NDK}/shader-tools/windows-x86_64" "${ANDROID_NDK}/shader-tools/linux-x86_64" "${ANDROID_NDK}/shader-tools/darwin-x86_64" REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-# Preserve the qualified binary for unchanged upstream shaders. Edited sources
-# are compiled automatically; never silently use a stale precompiled include.
+# Optimize verified upstream binaries in place in the build directory. Modified
+# sources are compiled with the same optimization policy; upstream files stay intact.
 function(spektra_shader NAME PINNED_SHA BINARY_SHA)
     set(SOURCE "${ENGINE}/gpu/${NAME}.comp")
     set(OUTPUT "${SHADERS}/${NAME}_spv.inc")
@@ -22,14 +24,16 @@ function(spektra_shader NAME PINNED_SHA BINARY_SHA)
             message(FATAL_ERROR "Qualified SPIR-V changed for ${NAME}; update and qualify the source/binary pair")
         endif()
         add_custom_command(OUTPUT "${OUTPUT}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ENGINE}/precompiled/${NAME}_spv.inc" "${OUTPUT}"
-            DEPENDS "${SOURCE}" "${ENGINE}/precompiled/${NAME}_spv.inc" VERBATIM)
+            COMMAND "${Python3_EXECUTABLE}" "${ROOT}/tools/optimize_spirv_include.py"
+                --input "${ENGINE}/precompiled/${NAME}_spv.inc" --output "${OUTPUT}"
+                --optimizer "${SPIRV_OPT}" --validator "${SPIRV_VAL}"
+            DEPENDS "${SOURCE}" "${ENGINE}/precompiled/${NAME}_spv.inc" "${ROOT}/tools/optimize_spirv_include.py" VERBATIM)
     else()
         message(STATUS "Recompiling modified shader ${NAME}; rerun numerical qualification")
         add_custom_command(OUTPUT "${OUTPUT}"
-            COMMAND "${GLSLC}" --target-env=vulkan1.1 -fshader-stage=compute "${SOURCE}" -o "${SHADERS}/${NAME}.spv"
+            COMMAND "${GLSLC}" --target-env=vulkan1.1 -O -fshader-stage=compute "${SOURCE}" -o "${SHADERS}/${NAME}.spv"
             COMMAND "${SPIRV_VAL}" --target-env vulkan1.1 "${SHADERS}/${NAME}.spv"
-            COMMAND "${GLSLC}" --target-env=vulkan1.1 -fshader-stage=compute -mfmt=c "${SOURCE}" -o "${OUTPUT}"
+            COMMAND "${GLSLC}" --target-env=vulkan1.1 -O -fshader-stage=compute -mfmt=c "${SOURCE}" -o "${OUTPUT}"
             DEPENDS "${SOURCE}" VERBATIM)
     endif()
     set(SHADER_OUTPUTS ${SHADER_OUTPUTS} "${OUTPUT}" PARENT_SCOPE)
@@ -48,7 +52,9 @@ foreach(MODE IN LISTS DENSITY_MODES)
         endif()
         set(OUTPUT "${SHADERS}/density_${STAGE}${MODE}.inc")
         add_custom_command(OUTPUT "${OUTPUT}"
-            COMMAND "${GLSLC}" --target-env=vulkan1.1 -DDENSITY_STORAGE=${MODE} -fshader-stage=compute -mfmt=c "${SOURCE}" -o "${OUTPUT}"
+            COMMAND "${GLSLC}" --target-env=vulkan1.1 -O -DDENSITY_STORAGE=${MODE} -fshader-stage=compute "${SOURCE}" -o "${SHADERS}/density_${STAGE}${MODE}.spv"
+            COMMAND "${SPIRV_VAL}" --target-env vulkan1.1 "${SHADERS}/density_${STAGE}${MODE}.spv"
+            COMMAND "${GLSLC}" --target-env=vulkan1.1 -O -DDENSITY_STORAGE=${MODE} -fshader-stage=compute -mfmt=c "${SOURCE}" -o "${OUTPUT}"
             DEPENDS "${SOURCE}" VERBATIM)
         list(APPEND SHADER_OUTPUTS "${OUTPUT}")
     endforeach()
