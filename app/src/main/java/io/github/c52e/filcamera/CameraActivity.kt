@@ -177,7 +177,7 @@ class CameraActivity: ComponentActivity() {
                         if(selectedPhotos.isNotEmpty()) {
                             CameraIconButton(CameraIcons.SelectAll,tr(Texts.string.select_all),!ui.working) {selectedPhotos=ArrayList(ui.photos.map {it.id})}
                             CameraIconButton(CameraIcons.Delete,tr(Texts.string.delete),!ui.working) {batchDelete=true}
-                        } else TextButton(onClick={importPhotos.launch(arrayOf("*/*"))},enabled=!ui.working) {Text(tr(Texts.string.import_dng))}
+                        } else TextButton(onClick={importPhotos.launch(arrayOf("image/jpeg","image/heic","image/heif","image/x-adobe-dng"))},enabled=!ui.working) {Text(tr(Texts.string.import_dng))}
                     }
                 }
                 when(page) {
