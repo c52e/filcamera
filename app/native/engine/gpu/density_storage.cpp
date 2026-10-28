@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "density_storage.h"
 #include <array>
+#include "buffer_chunks.h"
 namespace {
 const uint32_t layers0[]=
 #include "density_layers0.inc"
@@ -81,7 +82,7 @@ struct DensityStorage::Impl {
         std::vector<VkDescriptorType> pt(5,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),st(4,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
         if(mode==2) {pt[4]=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;st[0]=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;}
         producer=std::make_unique<fc::Compute>(g,producerCode,producerBytes,5,68,pt,group);
-        consumer=std::make_unique<fc::Compute>(g,consumerCode,consumerBytes,4,36,st,group);
+        consumer=std::make_unique<fc::Compute>(g,consumerCode,consumerBytes,4,40,st,group);
     }
     void validate(FcGpuBufferView v) const {
         if(v.owner!=g || !v.buffer || v.element!=FC_GPU_F32 || v.bytes<uint64_t(width)*height*12) throw std::runtime_error("Density frame view mismatch");
@@ -116,13 +117,20 @@ void DensityStorage::layers(FcGpuBufferView source,const float* curves,size_t co
     s.initialized=true;s.ready=true;
 }
 uint32_t DensityStorage::sample(FcGpuBufferView output,const float* cells,size_t count,const void* push,size_t pushBytes) {
-    auto& s=*impl;s.validate(output);if(!s.ready || pushBytes!=36) throw std::runtime_error("Density sampler has no matching producer");s.upload(s.cells,cells,count);
+    auto& s=*impl;s.validate(output);if(!s.ready || pushBytes!=40) throw std::runtime_error("Density sampler has no matching producer");s.upload(s.cells,cells,count);
     std::memset(s.counter->mapped,0,16);fc_gpu_count(FC_CONSTANT_UPLOAD,16);
     std::vector<VkDescriptorBufferInfo> b={s.mode==2?s.dummy->descriptor():s.density->descriptor(),{output.buffer,0,output.bytes},s.cells->descriptor(),s.counter->descriptor()};
     std::vector<VkDescriptorImageInfo> images(4);images[0]={s.sampler,s.view,VK_IMAGE_LAYOUT_GENERAL};
-    std::array<uint32_t,9> params{};std::memcpy(params.data(),push,pushBytes);
-    params[3]=std::min((s.width*s.height+s.group-1)/s.group,s.g->properties.limits.maxComputeWorkGroupCount[0]);
-    s.consumer->run(b,params.data(),uint32_t(pushBytes),s.width*s.height,images);s.ready=false;
+    std::array<uint32_t,10> params{};std::memcpy(params.data(),push,pushBytes);
+    const uint32_t chunk=fc::buffer_chunk_size(s.g->properties.limits,12);
+    for(uint32_t base=0;base<s.width*s.height;base+=chunk) {
+        const uint32_t n=std::min(chunk,s.width*s.height-base);
+        params[0]=n;params[9]=base;
+        params[3]=std::min((n+s.group-1)/s.group,s.g->properties.limits.maxComputeWorkGroupCount[0]);
+        b[1]={output.buffer,uint64_t(base)*12,uint64_t(n)*12};
+        s.consumer->run(b,params.data(),uint32_t(pushBytes),n,images);
+    }
+    s.ready=false;
     // The caller may now reuse this allocation as later spatial scratch. The
     // next producer overwrites it only after those synchronous stages finish.
     fc_gpu_count(FC_STATISTIC_READBACK,4);return *static_cast<uint32_t*>(s.counter->mapped);

@@ -1,4 +1,5 @@
 #include "compute.h"
+#include <numeric>
 #include "bitmap_spv.h"
 #include <android/bitmap.h>
 #include <jni.h>
@@ -39,7 +40,17 @@ extern "C" JNIEXPORT jlong JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vulka
         struct Push {uint32_t width,height,stride,half;float r[4],g[4],b[4];} push{info.width,info.height,info.stride/4,uint32_t(half),{m[0],m[1],m[2],0},{m[3],m[4],m[5],0},{m[6],m[7],m[8],0}};
         {
             fc::Compute compute(gpu,bitmap_spv,sizeof(bitmap_spv),3,sizeof(push));
-            compute.run({source.descriptor(),output.descriptor(),status.descriptor()},&push,sizeof(push),info.width*info.height);
+            const uint64_t alignment=std::max<VkDeviceSize>(1,gpu->properties.limits.minStorageBufferOffsetAlignment);
+            const uint64_t rowStep=std::lcm(alignment/std::gcd(alignment,uint64_t(info.stride)),
+                                           alignment/std::gcd(alignment,uint64_t(info.width)*12));
+            const uint32_t rows=uint32_t((4u*1024u*1024u/info.width)/rowStep*rowStep);
+            require(rows>0,"Bitmap chunk alignment unsupported");
+            for(uint32_t row=0;row<info.height;row+=rows) {
+                push.height=std::min(rows,info.height-row);
+                VkDescriptorBufferInfo src{source.buffer,uint64_t(row)*info.stride,uint64_t(push.height)*info.stride};
+                VkDescriptorBufferInfo dst{output.buffer,uint64_t(row)*info.width*12,uint64_t(push.height)*info.width*12};
+                compute.run({src,dst,status.descriptor()},&push,sizeof(push),info.width*push.height);
+            }
         }
         fc_gpu_count(FC_IMAGE_UPLOAD,source.bytes);fc_gpu_count(FC_STATISTIC_READBACK,4);
         require(*static_cast<uint32_t*>(status.mapped)==0,"Nonfinite bitmap input");

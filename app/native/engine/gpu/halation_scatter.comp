@@ -106,6 +106,15 @@ const uint kBlurFieldFirRadius = 11u;
 // finite if the table is ever wrong.
 const int kMaxFirRadius = 256;
 
+// Keep the high word live: this driver can narrow a folded RGB address
+// multiply to 24 bits. Supported frames have at most 60M pixels, so the
+// high word is zero and the returned component offset is exactly pixel*3.
+uint rgbIndex(uint pixel) {
+  uint hi, lo;
+  umulExtended(pixel, 3u, hi, lo);
+  return lo + hi;
+}
+
 // Packed float triples: element (pixel, channel) is at pixel * 3 + channel.
 layout(std430, binding = 0) readonly buffer Input0 {
   float in0[];
@@ -290,7 +299,7 @@ DF iirStep(Coeff B, Coeff p1, Coeff p2, Coeff p3, float x, DF w1, DF w2, DF w3) 
 
 // Element (j, channel c) of column `line` in a packed buffer.
 uint columnElement(uint line, uint j, uint c) {
-  return (j * params.width + line) * 3u + c;
+  return rgbIndex(j * params.width + line) + c;
 }
 
 // Young-van Vliet IIR of one channel down one column, in place on buf1. The
@@ -361,7 +370,7 @@ void iirColumnAccumulate(uint line, uint n, uint slot, uint c, float weight) {
 float firPixel(uvec2 gid, uint c, float sigma, int radius, bool alongX) {
   const int x = int(gid.x);
   const int y = int(gid.y);
-  const float centre = in0[(gid.y * params.width + gid.x) * 3u + c];
+  const float centre = in0[rgbIndex(gid.y * params.width + gid.x) + c];
   if (radius <= 0) {
     return centre;
   }
@@ -378,7 +387,7 @@ float firPixel(uvec2 gid, uint c, float sigma, int radius, bool alongX) {
     const int hi = reflectIndex(p + k, n);
     const uint loIdx = alongX ? uint(y) * params.width + uint(lo) : uint(lo) * params.width + uint(x);
     const uint hiIdx = alongX ? uint(y) * params.width + uint(hi) : uint(hi) * params.width + uint(x);
-    acc += (in0[loIdx * 3u + c] + in0[hiIdx * 3u + c]) * g;
+    acc += (in0[rgbIndex(loIdx) + c] + in0[rgbIndex(hiIdx) + c]) * g;
     weightSum += 2.0 * g;
     g *= ratio;
     ratio *= ratioStep;
@@ -399,7 +408,7 @@ void transposeTile() {
   for (uint k = 0u; k < 4u; ++k) {
     const uint y = group.y * 32u + local.y + k * 8u;
     if (x < params.width && y < params.height) {
-      const uint idx = (y * params.width + x) * 3u;
+      const uint idx = rgbIndex(y * params.width + x);
       tile[0][local.y + k * 8u][local.x] = in0[idx];
       tile[1][local.y + k * 8u][local.x] = in0[idx + 1u];
       tile[2][local.y + k * 8u][local.x] = in0[idx + 2u];
@@ -410,7 +419,7 @@ void transposeTile() {
   for (uint k = 0u; k < 4u; ++k) {
     const uint ty = group.x * 32u + local.y + k * 8u;  // transposed y = original x
     if (tx < params.height && ty < params.width) {
-      const uint idx = (ty * params.height + tx) * 3u;
+      const uint idx = rgbIndex(ty * params.height + tx);
       if ((mask & 1u) != 0u) buf1[idx] = tile[0][local.x][local.y + k * 8u];
       if ((mask & 2u) != 0u) buf1[idx + 1u] = tile[1][local.x][local.y + k * 8u];
       if ((mask & 4u) != 0u) buf1[idx + 2u] = tile[2][local.x][local.y + k * 8u];
@@ -423,12 +432,12 @@ void main() {
     uvec2 p=gl_GlobalInvocationID.xy;
     if(p.x>=params.width || p.y>=params.height) return;
     uint factor=params.component;
-    uint index=(p.y*params.width+p.x)*3u;
+    uint index=rgbIndex(p.y*params.width+p.x);
     if(params.operation==18u) {
       for(uint c=0u;c<3u;++c) {
         float sum=0.0;
         for(uint y=0u;y<factor;++y) for(uint x=0u;x<factor;++x)
-          sum+=in0[((p.y*factor+y)*params.fullWidth+p.x*factor+x)*3u+c];
+          sum+=in0[rgbIndex((p.y*factor+y)*params.fullWidth+p.x*factor+x)+c];
         buf1[index+c]=sum/float(factor*factor);
       }
     } else {
@@ -437,8 +446,8 @@ void main() {
       ivec2 lo=ivec2(floor(q));vec2 t=fract(q);
       ivec2 a=clamp(lo,ivec2(0),size-1),b=clamp(lo+1,ivec2(0),size-1);
       for(uint c=0u;c<3u;++c) {
-        float v=mix(mix(in0[(a.y*size.x+a.x)*3+int(c)],in0[(a.y*size.x+b.x)*3+int(c)],t.x),
-                    mix(in0[(b.y*size.x+a.x)*3+int(c)],in0[(b.y*size.x+b.x)*3+int(c)],t.x),t.y);
+        float v=mix(mix(in0[rgbIndex(uint(a.y*size.x+a.x))+c],in0[rgbIndex(uint(a.y*size.x+b.x))+c],t.x),
+                    mix(in0[rgbIndex(uint(b.y*size.x+a.x))+c],in0[rgbIndex(uint(b.y*size.x+b.x))+c],t.x),t.y);
         buf1[index+c]=(params.clearAccumulator!=0u?0.0:buf1[index+c])+v;
       }
     }
@@ -474,7 +483,7 @@ void main() {
   if (gid.x >= params.width || gid.y >= params.height) {
     return;
   }
-  const uint index = (gid.y * params.width + gid.x) * 3u;
+  const uint index = rgbIndex(gid.y * params.width + gid.x);
   if (params.operation == kOpFirX || params.operation == kOpFirYAccumulate) {
     const bool alongX = params.operation == kOpFirX;
     const uint slot = blurSlot();

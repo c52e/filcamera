@@ -10,6 +10,7 @@ void lab_compute_barrier(VkCommandBuffer cmd) {
 }
 }
 #include "runtime.h"
+#include "buffer_chunks.h"
 /*
  * Spektrafilm for Android — GPU (Vulkan compute) fast-path implementation. GPLv3.
  * Film modeling powered by spektrafilm.
@@ -1748,6 +1749,7 @@ struct GrainPush {
     uint32_t width;
     uint32_t height;
     float subtract[3];
+    uint32_t base_pixel;
 };
 
 constexpr uint32_t kGrainCellStride = 16u;   // floats per cell, matches CELL_STRIDE
@@ -1877,7 +1879,7 @@ bool grain_sample(const GrainSampleRequest& request, float* out_rgb,
                 target.cap=scratch->bytes;target.allocationSize=scratch->bytes;target.memoryFlags=VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             }
             d.gpu_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
-            c.frame.front^=1u;d.slices=1;d.engaged=true;d.reason="";if(diagnostics) *diagnostics=d;return true;
+            c.frame.front^=1u;d.slices=(request.npix+fc::buffer_chunk_size(limits,12)-1)/fc::buffer_chunk_size(limits,12);d.engaged=true;d.reason="";if(diagnostics) *diagnostics=d;return true;
         } catch(const std::exception&) {c.densityStorage.reset();return give_up("density-sampler-failed");}
     }
 
@@ -1910,8 +1912,6 @@ bool grain_sample(const GrainSampleRequest& request, float* out_rgb,
             break;
         }
 
-        const bool hadIn = s.in.cap >= inBytes && s.in.buf;
-        const bool hadOut = s.out.cap >= outBytes && s.out.buf;
         // The input alone is npix * ncells * 4 -- 449 MB at 12.5 MP with nine
         // cells, asked for next to the diffusion transform's own scratch.
         why = "allocation-failed";
@@ -1920,7 +1920,7 @@ bool grain_sample(const GrainSampleRequest& request, float* out_rgb,
         if (!c.ensureBuf(s.dyeB, cellBytes)) break;      // per-cell constants
         if (!c.ensureBuf(s.cmfB, counterBytes)) break;   // out-of-branch counter
         why = "dispatch-failed";
-        if (resident || !hadIn || !hadOut || s.boundResident) {
+        {
             s.boundResident=resident;
             VkBuffer bufs[4] = {s.in.buf, resident?c.frame.plane[c.frame.front^1u].buf:s.out.buf, s.dyeB.buf, s.cmfB.buf};
             VkDeviceSize caps[4] = {s.in.cap, resident?c.frame.plane[c.frame.front^1u].cap:s.out.cap, s.dyeB.cap, s.cmfB.cap};
@@ -1976,7 +1976,16 @@ bool grain_sample(const GrainSampleRequest& request, float* out_rgb,
 
         const auto t_gpu = std::chrono::steady_clock::now();
         bool dispatch_ok = true;
-        do {
+        const uint32_t chunk=fc::buffer_chunk_size(limits,12);
+        for(uint32_t base=0;base<request.npix;base+=chunk) {
+            const uint32_t n=std::min(chunk,request.npix-base);
+            const auto grid=plan_pointwise_dispatch(n,limits.maxComputeWorkGroupCount[0],limits.maxComputeWorkGroupCount[1]);
+            push.npix=n;push.base_pixel=base;push.groups_x=grid.groups_x;
+            VkDescriptorBufferInfo info{resident?c.frame.plane[c.frame.front^1u].buf:s.out.buf,VkDeviceSize(base)*12,VkDeviceSize(n)*12};
+            VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            write.dstSet=s.dset;write.dstBinding=1;write.descriptorCount=1;
+            write.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;write.pBufferInfo=&info;
+            vkUpdateDescriptorSets(c.device,1,&write,0,nullptr);
             if (vkResetCommandBuffer(s.cmd, 0) != VK_SUCCESS) { dispatch_ok = false; break; }
             VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1995,11 +2004,11 @@ bool grain_sample(const GrainSampleRequest& request, float* out_rgb,
             if (vkQueueSubmit(c.queue, 1, &si, s.fence) != VK_SUCCESS) { dispatch_ok = false; break; }
             if (vkWaitForFences(c.device, 1, &s.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) { dispatch_ok = false; break; }
             if (vkResetFences(c.device, 1, &s.fence) != VK_SUCCESS) { dispatch_ok = false; break; }
-        } while (false);
+            ++d.slices;
+        }
         d.gpu_ms = std::chrono::duration<double, std::milli>(
                        std::chrono::steady_clock::now() - t_gpu).count();
         if (!dispatch_ok) break;
-        d.slices = 1;
 
         const auto t_back = std::chrono::steady_clock::now();
         {
@@ -2210,7 +2219,8 @@ constexpr uint32_t kFilmModeSubC = 8u;
 constexpr uint32_t kFilmFlagPositive = 2u;
 constexpr uint32_t kFilmFlagLog10 = 1u;
 
-// One dispatch, four buffers, one upload and one readback. Both entry points
+// Four buffers, one upload and one readback. The subtraction mode dispatches
+// aligned chunks; other modes use the full plane. Both entry points
 // funnel through here because they differ only in which table they carry and
 // what the source/destination element types are.
 struct FilmingStageRun {
@@ -2374,22 +2384,15 @@ bool run_filming_stage(const FilmingStageRun& r, FilmingStageDiagnostics* diagno
             !build_scan_pipeline(c, s, kFilmingStageSpv, sizeof(kFilmingStageSpv),
                                  sizeof(FilmingStagePush)))
             break;
-        const bool hadA = s.dyeB.cap >= tblABytes && s.dyeB.buf;
-        const bool hadB = s.cmfB.cap >= tblBBytes && s.cmfB.buf;
-        bool hadIn = true, hadOut = true;
         if (!resident) {
-            hadIn = s.in.cap >= planeBytes && s.in.buf;
-            hadOut = s.out.cap >= dstBytes && s.out.buf;
             if (!c.ensureBuf(s.in, planeBytes)) break;
             if (!c.ensureBuf(s.out, dstBytes)) break;
         }
         if(resident && r.mode==kFilmModeLayers && !c.ensureBuf(c.grainK.in,dstBytes)) break;
         if (!c.ensureBuf(s.dyeB, tblABytes)) break;
         if (!c.ensureBuf(s.cmfB, tblBBytes)) break;
-        // The descriptor set is rewritten whenever the buffers it names change,
-        // and switching between the resident planes and the mapped pair changes
-        // them, so residency is part of the condition.
-        if (resident || !hadIn || !hadOut || !hadA || !hadB || resident != s.boundResident) {
+        // Restore full ranges after a previous run left chunk-local bindings.
+        {
             VkBuffer inBuf = resident ? c.frame.plane[c.frame.front].buf : s.in.buf;
             VkBuffer outBuf = resident ? c.frame.plane[c.frame.front ^ 1u].buf : s.out.buf;
             if(resident && r.mode==kFilmModeLayers) outBuf=c.grainK.in.buf;
@@ -2469,7 +2472,22 @@ bool run_filming_stage(const FilmingStageRun& r, FilmingStageDiagnostics* diagno
 
         const auto t_gpu = std::chrono::steady_clock::now();
         bool dispatch_ok = true;
-        do {
+        const uint32_t chunk=r.mode==kFilmModeSubC?fc::buffer_chunk_size(limits,12):r.npix;
+        for(uint32_t base=0;base<r.npix;base+=chunk) {
+            const uint32_t n=std::min(chunk,r.npix-base);
+            const auto grid=plan_pointwise_dispatch(n,limits.maxComputeWorkGroupCount[0],limits.maxComputeWorkGroupCount[1]);
+            push.npix=n;push.groups_x=grid.groups_x;push.total_groups=grid.total_groups;
+            if(r.mode==kFilmModeSubC) {
+                VkDescriptorBufferInfo infos[2]={
+                    {resident?c.frame.plane[c.frame.front].buf:s.in.buf,VkDeviceSize(base)*12,VkDeviceSize(n)*12},
+                    {resident?c.frame.plane[c.frame.front^1u].buf:s.out.buf,VkDeviceSize(base)*12,VkDeviceSize(n)*12}};
+                VkWriteDescriptorSet writes[2]{};
+                for(uint32_t i=0;i<2;++i) {
+                    writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=s.dset;writes[i].dstBinding=i;
+                    writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[i].pBufferInfo=&infos[i];
+                }
+                vkUpdateDescriptorSets(c.device,2,writes,0,nullptr);
+            }
             if (vkResetCommandBuffer(s.cmd, 0) != VK_SUCCESS) { dispatch_ok = false; break; }
             VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
             bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -2487,7 +2505,7 @@ bool run_filming_stage(const FilmingStageRun& r, FilmingStageDiagnostics* diagno
             if (vkQueueSubmit(c.queue, 1, &si, s.fence) != VK_SUCCESS) { dispatch_ok = false; break; }
             if (vkWaitForFences(c.device, 1, &s.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) { dispatch_ok = false; break; }
             if (vkResetFences(c.device, 1, &s.fence) != VK_SUCCESS) { dispatch_ok = false; break; }
-        } while (false);
+        }
         d.gpu_ms = std::chrono::duration<double, std::milli>(
                        std::chrono::steady_clock::now() - t_gpu).count();
         if (!dispatch_ok) break;

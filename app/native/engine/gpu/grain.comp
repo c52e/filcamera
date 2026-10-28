@@ -79,6 +79,7 @@ layout(push_constant) uniform Push {
     float subtract_r;
     float subtract_g;
     float subtract_b;
+    uint base_pixel;   // global RNG and neighbour coordinates; output is chunk-local
 } pc;
 
 // PCG-RXS-M-XS, 32-bit (O'Neill). Counter-based: no state, so a sample depends
@@ -160,8 +161,9 @@ float sample_cell(uint k, uint gp, uint b, bool count, inout uint outside) {
 
 void main() {
     uint group = gl_WorkGroupID.y * pc.groups_x + gl_WorkGroupID.x;
-    uint p = group * WG + gl_LocalInvocationID.x;
-    if (p >= pc.npix) return;
+    uint local_p = group * WG + gl_LocalInvocationID.x;
+    if (local_p >= pc.npix) return;
+    uint p = pc.base_pixel + local_p;
 
     int w = int(pc.width);
     int h = int(pc.height);
@@ -207,9 +209,9 @@ void main() {
         acc[ch] += g;
     }
 
-    grain_out[p * 3u + 0u] = acc[0]-pc.subtract_r;
-    grain_out[p * 3u + 1u] = acc[1]-pc.subtract_g;
-    grain_out[p * 3u + 2u] = acc[2]-pc.subtract_b;
+    grain_out[local_p * 3u + 0u] = acc[0]-pc.subtract_r;
+    grain_out[local_p * 3u + 1u] = acc[1]-pc.subtract_g;
+    grain_out[local_p * 3u + 2u] = acc[2]-pc.subtract_b;
     // One atomic per pixel at most, and only when something fell outside.
     if (outside > 0u) atomicAdd(counters.out_of_branch, outside);
 }
