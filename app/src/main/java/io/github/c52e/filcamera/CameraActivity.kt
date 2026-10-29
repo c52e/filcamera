@@ -80,6 +80,8 @@ class CameraActivity: ComponentActivity() {
     val ui by model.state.collectAsState();val camera by model.camera.state.collectAsState();val edit by model.editor.state.collectAsState()
     val context=LocalContext.current
     var page by rememberSaveable {mutableStateOf("camera")}
+    // Keep the library position while its grid is absent on photo/editor/camera pages.
+    val libraryGridState=rememberLazyGridState()
     var selectedId by rememberSaveable {mutableStateOf("")}
     var versionId by rememberSaveable {mutableStateOf("")}
     var previewEpoch by remember {mutableIntStateOf(0)}
@@ -183,7 +185,7 @@ class CameraActivity: ComponentActivity() {
                 when(page) {
                     "library"-> {
                         if(ui.photos.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) {Text(tr(Texts.string.no_photos_yet_ntake_a_photo_or_import_a_dng_original),color=Muted)}
-                        else LazyVerticalGrid(GridCells.Adaptive(110.dp),Modifier.weight(1f),contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                        else LazyVerticalGrid(GridCells.Adaptive(110.dp),Modifier.weight(1f),state=libraryGridState,contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                             items(ui.photos,key={it.id}) {entry->Column(Modifier.clipRounded().semantics {contentDescription=tr(Texts.string.open_photo_value, entry.id)}.combinedClickable(enabled=!ui.working,onLongClick={togglePhoto(entry.id)},onLongClickLabel=tr(Texts.string.select_photo),onClick={if(selectedPhotos.isNotEmpty()) togglePhoto(entry.id) else {selectedId=entry.id;versionId=entry.latest?.id.orEmpty();page="photo"}})) {
                                 Box(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xff25272a)).then(if(entry.id in selectedPhotos) Modifier.border(2.dp,Accent) else Modifier),contentAlignment=Alignment.Center) {
                                     entry.displayFile?.let {GalleryImage(it,model.repository)} ?: Text(tr(Texts.string.dng_nready_to_develop),color=Accent)
