@@ -20,6 +20,7 @@ class PhotoRepository(private val context: Context) {
         val kind get()=when(source.extension.lowercase()) {"jpg","jpeg"->"jpeg";"heic","heif"->"heic";else->"dng"}
         val mime get()=when(kind) {"jpeg"->"image/jpeg";"heic"->"image/heic";else->"image/x-adobe-dng"}
         val displayFile get()=latest?.file ?: source.takeIf {kind!="dng"}
+            ?: File(source.parentFile,source.nameWithoutExtension+".preview.jpg").takeIf {it.isFile}
     }
     private val lab=File(context.filesDir,"lab")
     private val renders=File(context.filesDir,"renders")
@@ -84,7 +85,8 @@ class PhotoRepository(private val context: Context) {
         return when {
             header[0]==0xff.toByte() && header[1]==0xd8.toByte()->importBitmap(uri,"jpeg")
             String(header,4,4,Charsets.US_ASCII)=="ftyp"->importBitmap(uri,"heic")
-            else->importDng(uri)
+            (header[0]==0x49.toByte() && header[1]==0x49.toByte()) || (header[0]==0x4d.toByte() && header[1]==0x4d.toByte())->importDng(uri)
+            else->error(tr(Texts.string.unsupported_import_format))
         }
     }
     data class ImportFailure(val index: Int,val error: Exception)
@@ -106,14 +108,14 @@ class PhotoRepository(private val context: Context) {
         return ImportResult(photos,failures,skipped)
     }
     private fun ensureImportStorage() {
-        if(android.os.StatFs(lab.apply {mkdirs()}.path).availableBytes<=DngRawFile.MAX_FILE_BYTES+64L*1024*1024) throw ImportStorageException()
+        if(android.os.StatFs(lab.apply {mkdirs()}.path).availableBytes<=MAX_IMPORT_FILE_BYTES+64L*1024*1024) throw ImportStorageException()
     }
     private fun copyImport(uri: Uri,pending: File,tooLarge: Int) {
         requireNotNull(context.contentResolver.openInputStream(uri)).use {input->pending.outputStream().use {output->
             val bytes=ByteArray(65536);var total=0L
             while(true) {
                 val count=input.read(bytes);if(count<0) break
-                total+=count;require(total<=DngRawFile.MAX_FILE_BYTES) {tr(tooLarge)}
+                total+=count;require(total<=MAX_IMPORT_FILE_BYTES) {tr(tooLarge)}
                 output.write(bytes,0,count)
             }
         }}
@@ -137,19 +139,28 @@ class PhotoRepository(private val context: Context) {
         ensureImportStorage()
         val id=UUID.randomUUID().toString();val dir=File(lab,"imports").apply {mkdirs()}
         val pending=File(dir,"$id.pending");val source=File(dir,"$id.dng");val record=File(dir,"$id.json")
+        val preview=File(dir,"$id.preview.jpg")
         try {
             copyImport(uri,pending,Texts.string.dng_file_is_too_large)
             val decoded=DngRawFile.read(pending)
             check(pending.renameTo(source))
-            atomic(record,JSONObject().put("kind","dng").put("file","imports/$id.dng").put("sha256",PairCaptureStore.hash(source)).put("captureRecipe",decoded.record))
+            val sha256=PairCaptureStore.hash(source)
+            val standard=decoded.record.has("rawImport")
+            val entry=JSONObject().put("kind","dng").put("file","imports/$id.dng").put("sha256",sha256)
+                .put("captureRecipe",if(standard) JSONObject().put("recipe",FilmRecipe().json()) else decoded.record)
+            if(standard) {
+                entry.put("grainSeed",sha256.take(8).toLong(16)).put("rawImport",decoded.record)
+                DngImportPreview.write(decoded,preview)
+            }
+            atomic(record,entry)
             return Photo("import_$id",source,record,record.lastModified(),emptyList())
-        } catch(e: Exception) {source.delete();record.delete();throw e} finally {pending.delete()}
+        } catch(e: Throwable) {source.delete();record.delete();preview.delete();throw e} finally {pending.delete()}
     }
     fun verifySource(photo: Photo): String {
         val record=json(photo.record)
         val expected=record?.optString("sha256")?.takeIf {it.isNotBlank()} ?: record?.optJSONObject("files")?.optString("original.dng")?.takeIf {it.isNotBlank()}
         val actual=PairCaptureStore.hash(photo.source)
-        if(expected!=null) require(actual==expected) {tr(Texts.string.dng_checksum_failed_original_unchanged)}
+        if(expected!=null) require(actual==expected) {tr(Texts.string.original_checksum_failed)}
         return actual
     }
     fun exportOriginal(photo: Photo,uri: Uri) {
@@ -201,6 +212,7 @@ class PhotoRepository(private val context: Context) {
         photo.versions.forEach {deleteVersion(photo,it)}
         if(photo.id.startsWith("import_")) {
             check(inside(photo.source).delete());inside(photo.record).delete()
+            inside(File(photo.source.parentFile,photo.source.nameWithoutExtension+".preview.jpg")).delete()
         } else {
             val dir=inside(photo.source.parentFile!!)
             require(dir.parentFile==File(lab,"pairs").canonicalFile)
@@ -208,6 +220,7 @@ class PhotoRepository(private val context: Context) {
         }
     }
     companion object {
+        private const val MAX_IMPORT_FILE_BYTES=256L*1024*1024
         fun atomic(file: File,value: JSONObject) {
             file.parentFile!!.mkdirs();val pending=File(file.parentFile,file.name+".pending")
             try {pending.writeText(value.toString(2));java.nio.file.Files.move(pending.toPath(),file.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING,java.nio.file.StandardCopyOption.ATOMIC_MOVE)} finally {pending.delete()}

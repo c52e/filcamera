@@ -63,6 +63,63 @@ object CalibratedWhiteBalance {
     }
     data class Solution(val gains: List<Double>,val transform: Matrix,val neutral: List<Double>,val whiteXYZ: List<Double>)
 
+    data class DngSolution(val gains: List<Double>,val balancedCameraToD50: Matrix,val whiteXYZ: List<Double>)
+
+    /** DNG chapter 6, using the file's as-shot neutral rather than a Camera2 Kelvin request. */
+    fun solveDng(first: Anchor,second: Anchor?,asShotNeutral: List<Double>?,asShotWhiteXY: List<Double>?,
+                 analogBalance: List<Double> = listOf(1.0,1.0,1.0)): DngSolution {
+        require(analogBalance.size==3 && analogBalance.all {it.isFinite() && it>0})
+        val ab=diagonal(analogBalance)
+        val b=second ?: first
+        // Normalize each profile endpoint before interpolation, as defined by the DNG profile model.
+        fun normalizedColor(matrix: Matrix): Matrix {
+            val scale=matrix.apply(d50).max()
+            require(scale.isFinite() && scale>0) {"Invalid DNG color matrix white point"}
+            return if(scale in .99..1.01) matrix else matrix.scale(1/scale)
+        }
+        val cm1=normalizedColor(first.color);val cm2=normalizedColor(b.color)
+        fun weight(white: List<Double>): Double {
+            if(second==null || abs(first.kelvin-b.kelvin)<1.0) return 1.0
+            val cct=correlatedTemperature(white)
+            return ((1.0/cct-1.0/b.kelvin)/(1.0/first.kelvin-1.0/b.kelvin)).coerceIn(0.0,1.0)
+        }
+        fun xyzToCamera(w: Double)=(ab*first.calibration*cm1).blend(ab*b.calibration*cm2,w)
+        val neutral=asShotNeutral?.also {require(it.size==3 && it.all {v->v.isFinite() && v>0})}
+        var white=asShotWhiteXY?.let {
+            require(it.size==2 && it.all(Double::isFinite) && it[0]>0 && it[1]>0 && it.sum()<1)
+            listOf(it[0]/it[1],1.0,(1-it.sum())/it[1])
+        } ?: d50
+        require(neutral!=null || asShotWhiteXY!=null) {"DNG requires AsShotNeutral or AsShotWhiteXY"}
+        if(neutral!=null) {
+            for(pass in 0 until 30) {
+                val xyz=xyzToCamera(weight(white)).inverse().apply(neutral)
+                require(xyz.all {it.isFinite() && it>0}) {"Invalid DNG camera neutral"}
+                val next=xyz.map {it/xyz[1]}
+                val difference=next.zip(white) {x,y->abs(x-y)}.sum()
+                white=if(pass==29) next.zip(white) {x,y->(x+y)*.5} else next
+                if(difference<1e-9) break
+            }
+        }
+        val w=weight(white);val cm=xyzToCamera(w)
+        val rawNeutral=neutral ?: cm.apply(white)
+        val scale=rawNeutral.max();val cameraWhite=rawNeutral.map {it/scale}
+        require(cameraWhite.all {it.isFinite() && it>=.001 && it<=1}) {"Unsupported DNG white balance range"}
+        val cc=first.calibration.blend(b.calibration,w)
+        val fm1=first.normalizedForward();val fm2=b.normalizedForward()
+        val fm=if(fm1!=null && fm2!=null) fm1.blend(fm2,w) else fm1 ?: fm2
+        val toD50=if(fm!=null) {
+            val individualToReference=(ab*cc).inverse()
+            val reference=individualToReference.apply(cameraWhite)
+            require(reference.all {it.isFinite() && it>0})
+            fm*diagonal(reference.map {1/it})*individualToReference
+        } else {
+            val source=cm.inverse().apply(cameraWhite)
+            adapt(white,d50)*cm.inverse().scale(1/source[1])
+        }
+        val gains=cameraWhite.map {1/it}
+        return DngSolution(listOf(gains[0],gains[1],gains[1],gains[2]),toD50*diagonal(cameraWhite),white)
+    }
+
     fun solve(calibration: Calibration,kelvin: Int): Solution {
         require(kelvin in 2000..10000)
         val a=calibration.first;val b=calibration.second

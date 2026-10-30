@@ -107,7 +107,7 @@ import java.io.File
     ImageWorkspace(landscape,toolWidth,toolHeight,image={
         Box(Modifier.fillMaxSize().background(Color.Black).semantics {contentDescription=tr(Texts.string.live_viewfinder)},contentAlignment=Alignment.Center) {
             if(permission) key(epoch) {CameraPreview(model)} else Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),horizontalAlignment=Alignment.CenterHorizontally) {
-                Text(tr(Texts.string.let_the_light_in),fontSize=24.sp);Text(tr(Texts.string.allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs),color=Muted)
+                Text(tr(Texts.string.let_the_light_in),fontSize=24.sp);Text(tr(Texts.string.camera_access_notice),color=Muted)
                 Button(onClick=requestPermission) {Text(tr(Texts.string.allow_camera_access))}
                 TextButton(onClick={context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+context.packageName)))}) {Text(tr(Texts.string.open_permission_settings))}
             }

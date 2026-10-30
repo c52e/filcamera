@@ -138,7 +138,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vul
         fc_gpu_clear_memory_error();
         const auto started=Clock::now();std::array<double,17> times{};
         const auto gpuStart=fc_gpu_counts();
-        auto length=env->GetArrayLength(parameters);require(length>=40,"RAW parameters truncated");
+        auto length=env->GetArrayLength(parameters);require(length>=45,"RAW parameters truncated");
         std::vector<uint32_t> p(length);env->GetIntArrayRegion(parameters,0,length,reinterpret_cast<jint*>(p.data()));
         if(env->ExceptionCheck()) return nullptr;
         require(p[0]>=2 && p[1]>=2 && uint64_t(p[0])*p[1]<=FC_MAX_PIXELS && p[2]>0 && p[3]>0 && uint64_t(p[2])*p[3]<=FC_MAX_PIXELS,"Invalid RAW dimensions");

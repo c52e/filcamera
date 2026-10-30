@@ -21,6 +21,10 @@ float g(int x,int y) { return green[mirror(y,int(p[1]))*int(p[0])+mirror(x,int(p
 float shade(uint channel,uint x,uint y) {
     FC_PRECISE float gx=float(x)/float(p[0]-1)*(float(p[8])-1);
     FC_PRECISE float gy=float(y)/float(p[1]-1)*(float(p[9])-1);
+    if(p[40]!=0) {
+        gx=clamp((float(x)/float(p[0]-1)*f(41)+f(43))*(float(p[8])-1),0.0,float(p[8])-1);
+        gy=clamp((float(y)/float(p[1]-1)*f(42)+f(44))*(float(p[9])-1),0.0,float(p[9])-1);
+    }
     uint ix=uint(gx),iy=uint(gy),jx=min(ix+1,p[8]-1),jy=min(iy+1,p[9]-1);
     FC_PRECISE float fx=gx-float(ix),fy=gy-float(iy);
     FC_PRECISE float a=f(p[14]+(iy*p[8]+ix)*4+channel),b=f(p[14]+(iy*p[8]+jx)*4+channel);

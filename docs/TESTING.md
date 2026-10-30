@@ -34,6 +34,23 @@ films/papers/effects: use representative fixed recipes and expand only on failur
 
 Optional device checks:
 
+Standard DNG import: supply any supported user-owned standard Bayer file as
+`standard-input.dng` in the debug app cache, then run
+`StandardDngImportTest` with instrumentation argument `standardDngImport=true`.
+The optional fixture check imports the original, develops preview/final sizes,
+checks repeatability after reopening, saves an edit, and verifies byte-identical
+original export and output dimensions against the prepared input. It does not
+require a particular image size or GainMap. Test imports, edits and outputs are
+removed and user fixtures stay unchanged. Fixture files are
+not distributed with the source.
+
+The same class always runs synthetic packed 12-bit/big-endian 16-bit decoding,
+truncated/required-opcode rejection, optional unsupported GainMap handling, and
+mapped GainMap GPU-versus-CPU checks. App-authored DNG regression remains in `DngImportTest`.
+`imaging` unit tests cover DNG as-shot white balance, analog/camera calibration,
+dual-illuminant normalization, and pixel-center shading coordinates. This does
+not establish universal DNG support or matching proprietary camera JPEG rendering.
+
 - `GpuFilmCacheTest`, enabled with instrumentation argument `retainedDng` set
   to an existing DNG path relative to the debug app's `files` directory, runs
   same-binary GPU-negative-cache on/off comparisons. It checks exact pre-JPEG

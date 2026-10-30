@@ -23,6 +23,10 @@ data class CaptureFraming(val width: Int,val height: Int,val left: Int,val top: 
         .put("optics",optics?.let {JSONObject().put("focalMm",it.focalMm ?: JSONObject.NULL).put("sensorWidthMm",it.sensorWidthMm).put("sensorHeightMm",it.sensorHeightMm)
             .put("pixelWidth",it.pixelWidth).put("pixelHeight",it.pixelHeight).put("left",it.left).put("top",it.top).put("width",it.width).put("height",it.height)} ?: JSONObject.NULL)
     companion object {
+        fun dng(crop: org.json.JSONArray,w: Int,h: Int): CaptureFraming {
+            require(crop.length()==4)
+            return CaptureFraming(w,h,crop.getInt(0),crop.getInt(1),crop.getInt(2),crop.getInt(3),null,null)
+        }
         fun create(w: Int,h: Int,target: Double?,optics: CameraOptics?): CaptureFraming {
             if(target==null) return CaptureFraming(w,h,0,0,w,h,null,optics)
             val native=requireNotNull(optics?.equivalentMm) { tr(Texts.string.cannot_calculate_native_equivalent_focal_length) };require(target.isFinite() && target>native)

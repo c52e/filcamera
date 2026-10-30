@@ -53,8 +53,15 @@ EXIF orientation and embedded color profiles are handled by Android; editing inp
 converted on the GPU to linear ProPhoto RGB. Originals are retained byte for byte. Images are
 limited to 60 MP and 16384 pixels per side.
 
-DNG import currently accepts the app's embedded development record, not arbitrary
-third-party DNGs. Processing is serial and can take several seconds at full resolution.
+DNG import accepts app-authored originals and standard rectangular 2x2 Bayer DNGs:
+uncompressed 8/10/12/14/16-bit or lossless 16-bit JPEG. File calibration, white balance,
+default crop, orientation and supported four-site GainMaps feed the Vulkan developer.
+External DNGs start with the default film recipe and retain their original bytes.
+Linear/HDR variants, mirrored orientations, non-square pixels, nonzero black-level
+deltas and unsupported required opcodes are rejected; unsupported optional opcodes
+are skipped. A standard Bayer sample has been validated; other variants need validation.
+See [DNG support details](raw-vulkan/README.md#dng-input). Processing is serial and
+can take several seconds at full resolution.
 
 ## Project layout
 

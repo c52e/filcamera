@@ -19,6 +19,7 @@ import java.nio.ByteOrder
 object DngRawFile {
     init {System.loadLibrary("rawvulkan")}
     private external fun decodeJpeg(bytes: ByteArray,width: Int,height: Int): ByteArray
+    internal fun decodeLosslessJpeg(bytes: ByteArray,width: Int,height: Int)=decodeJpeg(bytes,width,height)
     const val FORMAT="filmcamera-raw-v1"
     const val MAX_FILE_BYTES=256L*1024*1024
     private const val MAX_DESCRIPTION=4*1024*1024
@@ -84,12 +85,9 @@ object DngRawFile {
             require(t.count==1);return values(t)[0]
         }
         require(directories.any {it.containsKey(50706)}) {tr(Texts.string.missing_dngversion)}
-        val raw=directories.singleOrNull {scalar(it,262,0)==32803L}
+        val raw=directories.singleOrNull {scalar(it,262,0)==32803L && scalar(it,254,0)==0L}
             ?: error(tr(Texts.string.an_undemosaiced_bayer_dng_image_is_required))
         val compression=scalar(raw,259)
-        require(compression in listOf(1L,7L) && scalar(raw,258)==16L && scalar(raw,277,1)==1L && scalar(raw,339,1)==1L) {
-            tr(Texts.string.only_this_app_s_16_bit_bayer_dngs_are_supported_uncompressed_or_l)
-        }
         require(scalar(raw,284,1)==1L) {tr(Texts.string.chunky_planar_dng_layout_is_not_supported)}
         val w=scalar(raw,256);val h=scalar(raw,257)
         require(w in 2..16384 && h in 2..16384 && w*h<=RawLimits.MAX_PIXELS) {tr(Texts.string.dng_exceeds_the_60_megapixel_limit)}
@@ -97,8 +95,11 @@ object DngRawFile {
             require(t.type==2 && t.count in 1..MAX_DESCRIPTION)
             bytes(t.offset,t.count).toString(Charsets.UTF_8).trimEnd('\u0000')
         }.firstOrNull {it.startsWith("{") && runCatching {JSONObject(it).optString("format")==FORMAT}.getOrDefault(false)}
-            ?: error(tr(Texts.string.a_dng_saved_by_this_app_is_required_embedded_development_record_m))
+            ?: return StandardDngReader.read(file,cancelled)
         val j=JSONObject(description)
+        require(compression in listOf(1L,7L) && scalar(raw,258)==16L && scalar(raw,277,1)==1L && scalar(raw,339,1)==1L) {
+            tr(Texts.string.only_this_app_s_16_bit_bayer_dngs_are_supported_uncompressed_or_l)
+        }
         require(j.getString("developer")==VulkanRawDeveloper.ID) {tr(Texts.string.unsupported_dng_developer_version)}
         require(j.getInt("width").toLong()==w && j.getInt("height").toLong()==h)
         val rotation=j.getInt("rotation");require(rotation in listOf(0,90,180,270))

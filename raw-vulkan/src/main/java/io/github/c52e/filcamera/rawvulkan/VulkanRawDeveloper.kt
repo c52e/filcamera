@@ -39,13 +39,17 @@ class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
         require(region.left>=0 && region.top>=0 && region.width>0 && region.height>0 && region.left.toLong()+region.width<=cw && region.top.toLong()+region.height<=ch)
         val scale=min(1.0,sqrt(maxPixels.toDouble()/(region.width.toLong()*region.height)))
         val w=max(1,min(maxPixels,floor(region.width*scale).toInt()));val h=max(1,min(maxPixels/w,floor(region.height*scale).toInt()))
-        val p=ArrayList<Int>();repeat(40) { p.add(0) }
+        val p=ArrayList<Int>();repeat(45) { p.add(0) }
         p[0]=cw;p[1]=ch;p[2]=w;p[3]=h;p[4]=frame.left;p[5]=frame.top;p[6]=frame.rowStride;p[7]=frame.pixelStride
         val shading=frame.shading
         p[8]=shading?.columns ?: 1;p[9]=shading?.rows ?: 1
         for(i in 0..3) { p[16+i]=frame.pattern.channels[i];p[20+i]=frame.black[i].toRawBits();p[25+i]=frame.gains[i].toRawBits() }
         p[24]=frame.white.toRawBits()
         p[38]=if(rotation==null) 0 else 1;p[39]=rotation ?: 0
+        if(shading?.mapped==true) {
+            p[40]=1;p[41]=shading.xScale.toRawBits();p[42]=shading.yScale.toRawBits()
+            p[43]=shading.xOffset.toRawBits();p[44]=shading.yOffset.toRawBits()
+        }
         val matrix=ColorMath.multiply(ColorMath.srgbTo2020,frame.cameraToSrgb)
         for(i in 0..8) p[29+i]=matrix[i].toRawBits()
         p[14]=p.size;(shading?.gains ?: floatArrayOf(1f,1f,1f,1f)).forEach { p.add(it.toRawBits()) }

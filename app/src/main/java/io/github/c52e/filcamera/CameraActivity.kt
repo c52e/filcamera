@@ -98,7 +98,7 @@ class CameraActivity: ComponentActivity() {
     var asked by remember {mutableStateOf(prefs.getBoolean("cameraAsked",false))}
     val permissionRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {permission=it;LocalDiagnostics.event("APP.permission","camera=$it")}
     var exportId by rememberSaveable {mutableStateOf("")}
-    val importPhotos=rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {model.import(it)}
+    val importPhotos=rememberLauncherForActivityResult(PhotoImportContract()) {model.import(it)}
     val exportDng=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/x-adobe-dng")) {uri->
         ui.photos.firstOrNull {it.id==exportId}?.let {photo->if(uri!=null) model.export(photo,uri)}
     }
@@ -179,12 +179,12 @@ class CameraActivity: ComponentActivity() {
                         if(selectedPhotos.isNotEmpty()) {
                             CameraIconButton(CameraIcons.SelectAll,tr(Texts.string.select_all),!ui.working) {selectedPhotos=ArrayList(ui.photos.map {it.id})}
                             CameraIconButton(CameraIcons.Delete,tr(Texts.string.delete),!ui.working) {batchDelete=true}
-                        } else TextButton(onClick={importPhotos.launch(arrayOf("image/jpeg","image/heic","image/heif","image/x-adobe-dng"))},enabled=!ui.working) {Text(tr(Texts.string.import_dng))}
+                        } else TextButton(onClick={importPhotos.launch(arrayOf("image/*"))},enabled=!ui.working) {Text(tr(Texts.string.import_photos))}
                     }
                 }
                 when(page) {
                     "library"-> {
-                        if(ui.photos.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) {Text(tr(Texts.string.no_photos_yet_ntake_a_photo_or_import_a_dng_original),color=Muted)}
+                        if(ui.photos.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) {Text(tr(Texts.string.library_empty),color=Muted)}
                         else LazyVerticalGrid(GridCells.Adaptive(110.dp),Modifier.weight(1f),state=libraryGridState,contentPadding=PaddingValues(8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                             items(ui.photos,key={it.id}) {entry->Column(Modifier.clipRounded().semantics {contentDescription=tr(Texts.string.open_photo_value, entry.id)}.combinedClickable(enabled=!ui.working,onLongClick={togglePhoto(entry.id)},onLongClickLabel=tr(Texts.string.select_photo),onClick={if(selectedPhotos.isNotEmpty()) togglePhoto(entry.id) else {selectedId=entry.id;versionId=entry.latest?.id.orEmpty();page="photo"}})) {
                                 Box(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xff25272a)).then(if(entry.id in selectedPhotos) Modifier.border(2.dp,Accent) else Modifier),contentAlignment=Alignment.Center) {
@@ -237,8 +237,8 @@ class CameraActivity: ComponentActivity() {
             when(panel) {
                 "settings"->{
                     Text("FILCamera",fontSize=26.sp,fontWeight=FontWeight.Bold);Text(tr(Texts.string.value_raw_film_camera, BuildConfig.VERSION_NAME),color=Muted)
-                    Spacer(Modifier.height(20.dp));Text(tr(Texts.string.jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay),color=Muted)
-                    TextButton(onClick={page="library";panel=""}) {Text(tr(Texts.string.open_library_import_dng))}
+                    Spacer(Modifier.height(20.dp));Text(tr(Texts.string.original_storage_notice),color=Muted)
+                    TextButton(onClick={page="library";panel=""}) {Text(tr(Texts.string.open_photo_library))}
                     TextButton(onClick={panel="license"}) {Text(tr(Texts.string.open_source_licenses_and_attribution))}
                     TextButton(onClick={panel="diagnostics"}) {Text(tr(Texts.string.diagnostic_details))}
                     TextButton(onClick={panel="developer"}) {Text(tr(Texts.string.developer_options))}
@@ -257,13 +257,13 @@ class CameraActivity: ComponentActivity() {
                         TextButton(onClick={model.publish(version);panel=""}) {Text(tr(Texts.string.save_to_system_gallery))}
                         TextButton(onClick={deletion="version";panel=""}) {Text(tr(Texts.string.delete_this_developed_version))}
                     }
-                    TextButton(onClick={exportId=photo.id;if(photo.kind=="heic") exportHeic.launch("FILCamera_${photo.id}.heic") else if(photo.kind=="jpeg") exportJpeg.launch("FILCamera_${photo.id}.jpg") else exportDng.launch("FILCamera_${photo.id}.dng");panel=""}) {Text(tr(Texts.string.export_dng_original))}
+                    TextButton(onClick={exportId=photo.id;if(photo.kind=="heic") exportHeic.launch("FILCamera_${photo.id}.heic") else if(photo.kind=="jpeg") exportJpeg.launch("FILCamera_${photo.id}.jpg") else exportDng.launch("FILCamera_${photo.id}.dng");panel=""}) {Text(tr(Texts.string.export_original))}
                     TextButton(onClick={deletion="photo";panel=""}) {Text(tr(Texts.string.delete_original_and_all_versions),color=MaterialTheme.colorScheme.error)}
                 }
             }
         }
     }
-    if(deletion.isNotEmpty() && photo!=null) AlertDialog(onDismissRequest={deletion=""},title={Text(if(deletion=="photo") tr(Texts.string.delete_this_photo) else tr(Texts.string.delete_this_version))},text={Text(if(deletion=="photo") tr(Texts.string.the_in_app_dng_original_and_all_developed_versions_will_be_perman) else tr(Texts.string.only_this_developed_version_will_be_deleted_the_dng_original_and))},confirmButton={TextButton(onClick={model.delete(photo,if(deletion=="version") version else null);if(deletion=="photo") page="library";deletion=""}) {Text(tr(Texts.string.delete))}},dismissButton={TextButton(onClick={deletion=""}) {Text(tr(Texts.string.cancel))}})
+    if(deletion.isNotEmpty() && photo!=null) AlertDialog(onDismissRequest={deletion=""},title={Text(if(deletion=="photo") tr(Texts.string.delete_this_photo) else tr(Texts.string.delete_this_version))},text={Text(if(deletion=="photo") tr(Texts.string.delete_photo_confirmation) else tr(Texts.string.delete_version_confirmation))},confirmButton={TextButton(onClick={model.delete(photo,if(deletion=="version") version else null);if(deletion=="photo") page="library";deletion=""}) {Text(tr(Texts.string.delete))}},dismissButton={TextButton(onClick={deletion=""}) {Text(tr(Texts.string.cancel))}})
 }
 
 private fun Modifier.clipRounded()=this.then(Modifier.background(Color(0xff25272a),RoundedCornerShape(10.dp)))

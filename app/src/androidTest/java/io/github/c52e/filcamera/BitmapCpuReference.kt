@@ -9,7 +9,7 @@ import java.io.File
 internal object BitmapCpuReference {
     fun prepare(file: File,fullResolution: Boolean,cancelled: ()->Boolean,timing: CaptureTiming?=null): Pair<NativeBuffer,Pair<Int,Int>> {
         fun <T> measured(name: String,body: ()->T): T = if(timing==null) body() else timing.stage(name,body)
-        val bitmap=measured("jpegImageDecode") {BitmapEditInput.decode(file,if(fullResolution) RawLimits.MAX_PIXELS else 3_000_000,wideColor=true)}
+        val bitmap=measured("bitmapImageDecode") {BitmapEditInput.decode(file,if(fullResolution) RawLimits.MAX_PIXELS else 3_000_000,wideColor=true)}
         try {
             val connector=ColorSpace.connect(checkNotNull(bitmap.colorSpace),BitmapEditInput.linearProPhoto)
             val components=FloatArray(3)

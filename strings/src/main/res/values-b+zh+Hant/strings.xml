@@ -1,5 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
+    <string name="unsupported_import_format">"不支援此圖片格式，請選擇 JPEG、HEIC 或 DNG。"</string>
     <string name="unsupported_dng_file_size">"DNG 檔案大小不受支援"</string>
     <string name="not_a_tiff_dng_file">"不是 TIFF/DNG 檔案"</string>
     <string name="dng_data_is_out_of_bounds_or_truncated">"DNG 資料越界或截斷"</string>
@@ -14,7 +15,6 @@
     <string name="only_this_app_s_16_bit_bayer_dngs_are_supported_uncompressed_or_l">"僅支援本 App 的 16-bit Bayer DNG（未壓縮或無損 JPEG）"</string>
     <string name="chunky_planar_dng_layout_is_not_supported">"不支援分塊或平面 DNG"</string>
     <string name="dng_exceeds_the_60_megapixel_limit">"DNG 超過當前 6000 萬畫素上限"</string>
-    <string name="a_dng_saved_by_this_app_is_required_embedded_development_record_m">"需要本版 FILCamera 儲存的 DNG（缺少內嵌顯影記錄）"</string>
     <string name="unsupported_dng_developer_version">"不支援此 DNG 的顯影演算法版本"</string>
     <string name="dng_orientation_does_not_match_its_development_record">"DNG 方向與顯影記錄不一致"</string>
     <string name="dng_cfa_does_not_match_its_development_record">"DNG CFA 與顯影記錄不一致"</string>
@@ -23,10 +23,6 @@
     <string name="frame_age_0f_ms" formatted="false">" · 影格延遲 %.0f ms"</string>
     <string name="message_1f_fps_cpu_submit_2f_ms" formatted="false">"%.1f fps · CPU 提交 %.2f ms"</string>
     <string name="gpu_preview_failed_value">"GPU 預覽失敗：%1$s"</string>
-    <string name="singular_white_balance_calibration_matrix">"奇異白平衡校正矩陣"</string>
-    <string name="calibration_produced_an_invalid_sensor_white_point">"校正產生了無效感光元件白點"</string>
-    <string name="temperature_gains_exceed_the_camera2_range">"色溫增益超出 Camera2 支援範圍"</string>
-    <string name="white_point_is_outside_the_robertson_table">"白點超出 Robertson 表範圍"</string>
     <string name="camera_has_not_started">"相機未啟動"</string>
     <string name="selected_position_is_outside_the_logical_camera_control_area">"所選位置超出邏輯相機可控制範圍"</string>
     <string name="missing_logical_camera_information">"缺少邏輯相機資訊"</string>
@@ -43,20 +39,15 @@
     <string name="auto_white_balance_was_not_confirmed_reopen_the_camera">"相機未確認自動白平衡，請重新開啟相機"</string>
     <string name="saving_and_developing">"正在儲存與顯影…"</string>
     <string name="could_not_start_processing_value">"處理啟動失敗：%1$s"</string>
-    <string name="no_available_camera_found">"未發現可用相機"</string>
     <string name="could_not_open_camera_value">"開啟相機失敗：%1$s"</string>
     <string name="this_lens_has_no_supported_raw_mode">"此鏡頭無受支援的 RAW 模式"</string>
     <string name="could_not_read_photo_value">"讀取照片失敗：%1$s"</string>
     <string name="camera_disconnected_please_retry">"相機被斷開，請重試"</string>
     <string name="camera2_error_value_please_retry">"Camera2 錯誤 %1$s，請重試"</string>
     <string name="raw_gpu_preview">"RAW + GPU 預覽"</string>
-    <string name="jpeg_mode_raw_unavailable">"JPEG 模式 · RAW 不可用"</string>
     <string name="preview_failed_value">"預覽失敗：%1$s"</string>
     <string name="device_rejected_this_lens_s_preview_raw_stream_combination">"裝置拒絕此鏡頭的預覽 / RAW 串流組合"</string>
-    <string name="stream_configuration_failed_value">"串流組合失敗：%1$s"</string>
-    <string name="device_rejected_the_preview_capture_stream_combination">"裝置拒絕預覽/拍照串流組合"</string>
     <string name="could_not_create_raw_session_value">"建立 RAW 工作階段失敗：%1$s"</string>
-    <string name="could_not_create_session_value">"建立工作階段失敗：%1$s"</string>
     <string name="preview_tone_curve_request_failed_value">"預覽曲線請求失敗：%1$s"</string>
     <string name="missing_captureresult_for_the_selected_physical_lens">"缺少所選實體鏡頭的 CaptureResult"</string>
     <string name="could_not_restore_preview_value">"預覽恢復失敗：%1$s"</string>
@@ -99,8 +90,6 @@
     <string name="could_not_set_focus_please_retry">"對焦設定失敗，請重試"</string>
     <string name="tap_focus_and_metering_are_unavailable_here">"此位置不支援點選對焦或測光"</string>
     <string name="saving_copy">"正在儲存副本"</string>
-    <string name="copy_saved">"副本已儲存"</string>
-    <string name="ok">"知道了"</string>
     <string name="cancel">"取消"</string>
     <string name="back">"返回"</string>
     <string name="value_selected">"已選 %1$s 張"</string>
@@ -109,8 +98,8 @@
     <string name="photo">"照片"</string>
     <string name="select_all">"全選"</string>
     <string name="delete">"刪除"</string>
-    <string name="import_dng">"匯入 DNG / JPG / HEIC"</string>
-    <string name="no_photos_yet_ntake_a_photo_or_import_a_dng_original">"還沒有照片\n拍下第一張，或匯入 DNG / JPG / HEIC 原片"</string>
+    <string name="import_photos">"匯入照片"</string>
+    <string name="library_empty">"還沒有照片\n拍下第一張，或匯入照片"</string>
     <string name="open_photo_value">"開啟照片 %1$s"</string>
     <string name="select_photo">"選擇照片"</string>
     <string name="dng_nready_to_develop">"DNG\n可重新顯影"</string>
@@ -123,8 +112,8 @@
     <string name="the_selected_originals_and_all_developed_versions_in_the_app_will">"將刪除所選照片在 App 內的原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
     <string name="confirm_delete">"確認刪除"</string>
     <string name="value_raw_film_camera">"%1$s · RAW 底片相機"</string>
-    <string name="jpg_95_photos_are_saved_to_the_system_gallery_dng_originals_stay">"JPG 95 自動儲存系統相簿。原片儲存在 App 內，解除安裝前請先匯出。"</string>
-    <string name="open_library_import_dng">"開啟照片庫 / 匯入 DNG / JPG / HEIC"</string>
+    <string name="original_storage_notice">"成片儲存在系統相簿。原片保存在 App 內，解除安裝前請先匯出。"</string>
+    <string name="open_photo_library">"開啟照片庫"</string>
     <string name="open_source_licenses_and_attribution">"開源授權與資料歸屬"</string>
     <string name="developer_options">"開發者選項"</string>
     <string name="open_source_licenses">"開源授權"</string>
@@ -137,12 +126,12 @@
     <string name="share_jpg">"分享 JPG"</string>
     <string name="save_to_system_gallery">"儲存到系統相簿"</string>
     <string name="delete_this_developed_version">"刪除當前成片版本"</string>
-    <string name="export_dng_original">"匯出原片"</string>
+    <string name="export_original">"匯出原片"</string>
     <string name="delete_original_and_all_versions">"刪除原片與全部版本"</string>
     <string name="delete_this_photo">"刪除整張照片？"</string>
     <string name="delete_this_version">"刪除當前版本？"</string>
-    <string name="the_in_app_dng_original_and_all_developed_versions_will_be_perman">"將刪除 App 內的原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
-    <string name="only_this_developed_version_will_be_deleted_the_dng_original_and">"只刪除當前成片，原片保留。系統相簿副本不受影響。"</string>
+    <string name="delete_photo_confirmation">"將刪除 App 內的原片和全部成片版本，無法撤銷。系統相簿副本保留。"</string>
+    <string name="delete_version_confirmation">"只刪除當前成片，原片保留。系統相簿副本不受影響。"</string>
     <string name="viewfinder_tap_to_focus_and_meter">"取景畫面，點選對焦與測光"</string>
     <string name="focus_and_meter_at_center">"中央對焦與測光"</string>
     <string name="viewfinder_controls">"取景參數面板"</string>
@@ -179,7 +168,7 @@
     <string name="camera_exposure_compensation">"相機曝光補償"</string>
     <string name="live_viewfinder">"即時取景區域"</string>
     <string name="let_the_light_in">"讓光線進入"</string>
-    <string name="allow_camera_access_to_take_photos_or_browse_and_import_dngs_firs">"允許使用相機即可拍攝，也可以先瀏覽照片或匯入 DNG / JPG / HEIC。"</string>
+    <string name="camera_access_notice">"允許使用相機即可拍攝，也可以先瀏覽或匯入照片。"</string>
     <string name="allow_camera_access">"允許使用相機"</string>
     <string name="open_permission_settings">"開啟權限設定"</string>
     <string name="switching_lens_2">"正在切換鏡頭…"</string>
@@ -195,9 +184,8 @@
     <string name="could_not_restore_the_last_recipe_using_defaults_value">"無法恢復上次配方，暫用預設值：%1$s"</string>
     <string name="could_not_read_library">"照片庫讀取失敗"</string>
     <string name="operation_failed">"操作失敗"</string>
-    <string name="dng_original_exported">"原片已匯出"</string>
+    <string name="original_exported">"原片已匯出"</string>
     <string name="saved_to_system_gallery">"已儲存至系統相簿"</string>
-    <string name="in_app_photo_deleted_system_gallery_copies_retained">"已刪除 App 內照片；系統相簿副本保留"</string>
     <string name="deleted_value_photos">"已刪除 %1$s 張照片"</string>
     <string name="value_could_not_be_deleted_please_retry">"，%1$s 張刪除失敗，請重試"</string>
     <string name="system_gallery_copies_retained">"；系統相簿副本保留"</string>
@@ -266,7 +254,7 @@
     <string name="invalid_photo_path">"照片路徑無效"</string>
     <string name="not_enough_storage_free_up_space_first">"空間不足，請先釋放儲存空間"</string>
     <string name="dng_file_is_too_large">"DNG 檔案過大"</string>
-    <string name="dng_checksum_failed_original_unchanged">"校驗失敗，原片未修改"</string>
+    <string name="original_checksum_failed">"校驗失敗，原片未修改"</string>
     <string name="test_gallery_write_failed">"測試：相簿寫入失敗"</string>
     <string name="reset">"重設"</string>
     <string name="reset_white_balance">"白平衡重設"</string>

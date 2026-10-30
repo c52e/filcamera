@@ -38,7 +38,7 @@ internal object BitmapEditInput {
     }
     fun prepareGpu(file: File,fullResolution: Boolean,cancelled: ()->Boolean,timing: CaptureTiming): io.github.c52e.filcamera.rawvulkan.VulkanRawDeveloper.FilmInput {
         if(cancelled()) throw InterruptedException()
-        val bitmap=timing.stage("jpegImageDecode") {decode(file,if(fullResolution) RawLimits.MAX_PIXELS else 3_000_000,wideColor=true)}
+        val bitmap=timing.stage("bitmapImageDecode") {decode(file,if(fullResolution) RawLimits.MAX_PIXELS else 3_000_000,wideColor=true)}
         try {
             if(cancelled()) throw InterruptedException()
             val converted=timing.stage("bitmapGpuConvert") {
