@@ -37,8 +37,8 @@ android {
         applicationId = "io.github.c52e.filcamera"
         minSdk = 29
         targetSdk = 35
-        versionCode = 53
-        versionName = "0.26.0"
+        versionCode = 54
+        versionName = "0.27.0"
         buildConfigField("String", "DIAGNOSTIC_BUILD", "\"$diagnosticBuild\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
