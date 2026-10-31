@@ -6,7 +6,8 @@ import kotlin.math.*
 import android.os.SystemClock
 
 /** Original implementation. No film profiles, GPL engine or image operations on the CPU. */
-class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
+class VulkanRawDeveloper(private val maxPixels: Int=3_000_000,
+                         private val reconstructHighlights: Boolean=true): RawDeveloper {
     var diagnostics: Map<String,Any> = emptyMap();private set
     class FilmInput(val width: Int,val height: Int,private val storage: NativeBuffer?,private var image: Long=0): AutoCloseable {
         private val owner=Thread.currentThread()
@@ -39,7 +40,8 @@ class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
         require(region.left>=0 && region.top>=0 && region.width>0 && region.height>0 && region.left.toLong()+region.width<=cw && region.top.toLong()+region.height<=ch)
         val scale=min(1.0,sqrt(maxPixels.toDouble()/(region.width.toLong()*region.height)))
         val w=max(1,min(maxPixels,floor(region.width*scale).toInt()));val h=max(1,min(maxPixels/w,floor(region.height*scale).toInt()))
-        val p=ArrayList<Int>();repeat(45) { p.add(0) }
+        val p=ArrayList<Int>();repeat(53) { p.add(0) }
+        p[45]=if(reconstructHighlights) 1 else 0
         p[0]=cw;p[1]=ch;p[2]=w;p[3]=h;p[4]=frame.left;p[5]=frame.top;p[6]=frame.rowStride;p[7]=frame.pixelStride
         val shading=frame.shading
         p[8]=shading?.columns ?: 1;p[9]=shading?.rows ?: 1
@@ -73,7 +75,7 @@ class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
         val bytes=ByteBuffer.allocateDirect(((count+3)/4*4).toInt())
         bytes.put(frame.bytes.duplicate().apply { limit(position()+count.toInt()) });bytes.rewind()
         if(Thread.currentThread().isInterrupted) throw InterruptedException()
-        val storage=if(resident) null else NativeBuffer.allocate(w*h*12);val output=storage?.pixels;val timings=DoubleArray(17);val image=LongArray(1)
+        val storage=if(resident) null else NativeBuffer.allocate(w*h*12);val output=storage?.pixels;val timings=DoubleArray(20);val image=LongArray(1)
         try {
         val prepared=SystemClock.elapsedRealtimeNanos()
         val device=process(bytes,p.toIntArray(),output,timings,image)
@@ -85,7 +87,10 @@ class VulkanRawDeveloper(private val maxPixels: Int=3_000_000): RawDeveloper {
         diagnostics=diagnostics+mapOf("dispatchCount" to timings[10].toInt(),"submitCount" to timings[11].toInt(),"batchSubmitWaitMs" to timings[12],"outputTransport" to if(resident) "gpu-image" else "test-host-f32",
             "gpuTimestampMs" to timings[13],"cpuWaitMs" to timings[14],"waitCount" to timings[15].toInt(),"timedSubmissions" to timings[16].toInt(),
             "rawUploadBytes" to bytes.capacity().toLong(),"constantsUploadBytes" to p.size.toLong()*4,
-            "imageReadbackBytes" to if(resident) 0L else w.toLong()*h*12,"statisticReadbackBytes" to 4)
+            "imageReadbackBytes" to if(resident) 0L else w.toLong()*h*12,"statisticReadbackBytes" to 8,
+            "highlightReconstruction" to if(reconstructHighlights) "opposed-cfa-v1" else "off",
+            "highlightGpuMs" to timings[17],"highlightScratchBytes" to timings[18].toLong(),
+            "highlightClipped" to (timings[19]!=0.0))
         return FilmInput(if(rotation==90 || rotation==270) h else w,if(rotation==90 || rotation==270) w else h,storage,image[0])
         } catch(e: Throwable) {if(image[0]!=0L) dropImage(image[0]);storage?.close();throw e}
     }

@@ -13,6 +13,12 @@ Capture: Camera2 RAW → full calibration/demosaic → framing, ProPhoto and ori
 readback → JPG 95. Intermediate floating-point images remain GPU-resident. A cropped
 input still spans a simulated 36 mm long-edge film frame.
 
+RAW calibration now includes GPU opposed-channel highlight reconstruction before
+lens shading and demosaic. It uses sensor-white saturation masks and nearby valid
+samples to estimate clipped colors; original DNG data are unchanged. The prepared
+linear input remains cached by `EditInput`, so recipe edits do not rerun this stage.
+This does not change the Camera2 ISP/GLES viewfinder path.
+
 Darkroom previews retain one GPU float32 CMY negative after film development,
 including fixed-seed grain. The cache uses the immutable GPU input image ID,
 dimensions, film profile/exposure/development, film spatial switches, grain seed

@@ -34,6 +34,19 @@ films/papers/effects: use representative fixed recipes and expand only on failur
 
 Optional device checks:
 
+- `RawHighlightsTest` checks opposed-channel reconstruction against an independent
+  double-precision CFA oracle followed by the CPU demosaic, for all four Bayer
+  patterns, odd crop origins, padded 3-byte pixel strides, split green gains,
+  lens shading and strict/relaxed arithmetic. Unsaturated input must match the
+  off path within 1e-6, and fully clipped 2/3/17/64-pixel squares must remain finite
+  with reduced false chroma. With `rawHighlightsFixture=true`, the test reads a
+  user-provided `cache/highlight-input.dng`, collects five alternating on/off pairs
+  at preview/full resolution after warm-up, and writes
+  `cache/raw-highlights-performance.json` plus `highlight-on.jpg`/`highlight-off.jpg`.
+  It never publishes these images or changes the original fixture. GPU intervals
+  and end-to-end preparation are reported separately; camera capture speed is not
+  inferred from RAW-only timing.
+
 Standard DNG import: supply any supported user-owned standard Bayer file as
 `standard-input.dng` in the debug app cache, then run
 `StandardDngImportTest` with instrumentation argument `standardDngImport=true`.

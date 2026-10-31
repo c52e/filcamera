@@ -11,6 +11,7 @@ This does not replace existing third-party copyright or license notices.
 | ICC profiles | [Elle Stone](https://github.com/ellelstone/elles_icc_profiles) | CC BY-SA 3.0; `app/model-data/assets/icc/ellelstone/LICENSE-CC-BY-SA-3.0` |
 | Compact ICC profiles | [saucecontrol](https://github.com/saucecontrol/Compact-ICC-Profiles) | MIT; `app/model-data/assets/icc/saucecontrol/LICENSE-MIT` |
 | RAW lossless JPEG decoding | [libjpeg-turbo 3.2.0](https://github.com/libjpeg-turbo/libjpeg-turbo/releases/tag/3.2.0) | IJG / BSD; downloaded source LICENSE.md and README.ijg bundled in APK |
+| RAW highlight reconstruction algorithm reference | darktable `src/iop/hlreconstruct/opposed.c`; garagecoder, Iain (G'MIC), Jens Hannoschwalm | GPL-3.0-or-later reference; FILCamera Vulkan implementation in `raw-vulkan/native/highlights.glsl` is independently expressed, GPL-3.0-only |
 | White-balance temperature convention/table | Adobe DNG SDK 1.7.1 build 2724; copyright 2006–2019 Adobe Systems Incorporated, All Rights Reserved | `licenses/DNG-SDK.txt`; complete SDK is not linked |
 | Gradle wrapper | Android Camera Samples `2f10e46fc7a09f7208f8d6de72482ecf3e5fb85a`; Gradle distribution 8.11.1 | Apache-2.0 and bundled notices in `licenses/` |
 | AndroidX / Kotlin | Versions pinned in Gradle build files | Apache-2.0, `licenses/Apache-2.0.txt` |

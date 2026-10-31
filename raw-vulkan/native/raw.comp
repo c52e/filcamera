@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 #ifdef FC_RELAXED
 #define FC_PRECISE
 #else
@@ -54,8 +55,10 @@ void writeOutput(vec3 sum,uint x,uint y) {
             outputRgb[index*3+channel]=value;
         }
 }
+#include "highlights.glsl"
 void main() {
     uint x=gl_GlobalInvocationID.x,y=gl_GlobalInvocationID.y;
+    if(pc.pass>=6) {highlights(pc.pass,x,y);return;}
     uint width=pc.pass<3 ? p[0] : p[2];
     uint height=pc.pass<4 ? p[1] : p[3];
     if(x>=width || y>=height) return;
@@ -67,7 +70,8 @@ void main() {
         uint lo=(raw[offset/4]>>((offset%4)*8))&255;
         uint hi=(raw[(offset+1)/4]>>(((offset+1)%4)*8))&255;
         uint s=site(ix,iy),channel=p[16+s];
-        precise float v=max(0.0,(float(lo+hi*256)-f(20+s))/(f(24)-f(20+s)))*f(25+channel)*shade(channel,x,y);
+        precise float v=max(0.0,(float(lo+hi*256)-f(20+s))/(f(24)-f(20+s)))*f(25+channel);
+        if(p[45]==0) v*=shade(channel,x,y);
         cfa[index]=v;
     } else if(pc.pass==1) {
         uint channel=p[16+site(ix,iy)];

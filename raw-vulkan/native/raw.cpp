@@ -25,6 +25,7 @@ struct Session {
     VkInstance instance{};VkPhysicalDevice physical{};VkDevice device{};VkQueue queue{};
     VkDescriptorSetLayout setLayout{};VkPipelineLayout layout{};VkShaderModule shader{};VkPipeline pipeline{};
     VkDescriptorPool descriptors{};VkDescriptorSet set{};VkCommandPool commands{};VkCommandBuffer command{};VkFence fence{};
+    VkQueryPool timestamps{};uint32_t timestampBits=0,dispatches=0,submits=0;double waitMs=0;
     VkPhysicalDeviceProperties properties{};VkPhysicalDeviceMemoryProperties memoryProperties{};
     std::array<Buffer,7> buffers{};uint32_t family=0;uint64_t allocated=0;
     uint32_t groupX=16,groupY=16;
@@ -33,6 +34,7 @@ struct Session {
         if(device) {
             vkDeviceWaitIdle(device);
             if(fence) vkDestroyFence(device,fence,nullptr);
+            if(timestamps) vkDestroyQueryPool(device,timestamps,nullptr);
             if(commands) vkDestroyCommandPool(device,commands,nullptr);
             if(descriptors) vkDestroyDescriptorPool(device,descriptors,nullptr);
             if(pipeline) vkDestroyPipeline(device,pipeline,nullptr);
@@ -52,6 +54,13 @@ struct Session {
         shared=fc_gpu_acquire();require(shared,fc_gpu_error());
         instance=shared->instance;physical=shared->physical;device=shared->device;queue=shared->queue;
         family=shared->family;properties=shared->properties;memoryProperties=shared->memory;
+        uint32_t families=0;vkGetPhysicalDeviceQueueFamilyProperties(physical,&families,nullptr);
+        std::vector<VkQueueFamilyProperties> queues(families);vkGetPhysicalDeviceQueueFamilyProperties(physical,&families,queues.data());
+        timestampBits=queues[family].timestampValidBits;
+        if(timestampBits) {
+            VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};qi.queryType=VK_QUERY_TYPE_TIMESTAMP;qi.queryCount=4;
+            check(vkCreateQueryPool(device,&qi,nullptr,&timestamps),"RAW timestamps");
+        }
         require(properties.limits.maxPerStageDescriptorStorageBuffers>=7 && properties.limits.maxDescriptorSetStorageBuffers>=7,"RAW requires seven storage buffers");
         require(properties.limits.maxComputeWorkGroupInvocations>=256 && properties.limits.maxComputeWorkGroupSize[0]>=16 && properties.limits.maxComputeWorkGroupSize[1]>=16,"RAW workgroup unsupported");
         std::array<VkDescriptorSetLayoutBinding,7> bindings{};
@@ -118,6 +127,7 @@ struct Session {
         vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_HOST_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,0,1,&barrier,0,nullptr,0,nullptr);
         vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_COMPUTE,pipeline);vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_COMPUTE,layout,0,1,&set,0,nullptr);
         vkCmdPushConstants(command,layout,VK_SHADER_STAGE_COMPUTE_BIT,0,4,&pass);vkCmdDispatch(command,(width+groupX-1)/groupX,(height+groupY-1)/groupY,1);
+        dispatches++;
         if(pass==4 || pass==5) {
             barrier.srcAccessMask=VK_ACCESS_SHADER_WRITE_BIT;barrier.dstAccessMask=VK_ACCESS_HOST_READ_BIT;
             vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,1,&barrier,0,nullptr,0,nullptr);
@@ -127,7 +137,9 @@ struct Session {
         check(vkEndCommandBuffer(command),"end command");
         VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};submit.commandBufferCount=1;submit.pCommandBuffers=&command;
         check(vkQueueSubmit(queue,1,&submit,fence),"submit compute");
+        auto begin=Clock::now();submits++;
         check(vkWaitForFences(device,1,&fence,VK_TRUE,10'000'000'000ULL),"wait compute");
+        waitMs+=ms(begin);
     }
 };
 }
@@ -136,16 +148,15 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vul
     JNIEnv* env,jobject,jobject input,jintArray parameters,jobject output,jdoubleArray timing,jlongArray imageHandle) {
     try {
         fc_gpu_clear_memory_error();
-        const auto started=Clock::now();std::array<double,17> times{};
-        const auto gpuStart=fc_gpu_counts();
-        auto length=env->GetArrayLength(parameters);require(length>=45,"RAW parameters truncated");
+        const auto started=Clock::now();std::array<double,20> times{};
+        auto length=env->GetArrayLength(parameters);require(length>=53,"RAW parameters truncated");
         std::vector<uint32_t> p(length);env->GetIntArrayRegion(parameters,0,length,reinterpret_cast<jint*>(p.data()));
         if(env->ExceptionCheck()) return nullptr;
         require(p[0]>=2 && p[1]>=2 && uint64_t(p[0])*p[1]<=FC_MAX_PIXELS && p[2]>0 && p[3]>0 && uint64_t(p[2])*p[3]<=FC_MAX_PIXELS,"Invalid RAW dimensions");
         auto data=env->GetDirectBufferAddress(input);auto bytes=env->GetDirectBufferCapacity(input);
         require(data && bytes>0 && bytes<=256*1024*1024 && bytes%4==0,"Invalid RAW upload");
         auto destination=output?env->GetDirectBufferAddress(output):nullptr;
-        require(env->GetArrayLength(timing)==17,"RAW timing size mismatch");
+        require(env->GetArrayLength(timing)==20,"RAW timing size mismatch");
         require(output?(destination && env->GetDirectBufferCapacity(output)==int64_t(p[2])*p[3]*12):(imageHandle && env->GetArrayLength(imageHandle)==1 && p[38]==1),"RAW output size mismatch");
         require(p[38]<=1 && (p[39]==0 || p[39]==90 || p[39]==180 || p[39]==270),"Invalid RAW output mode");
         Session s;s.init();
@@ -159,18 +170,60 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vul
         };
         const bool fast=(fc_gpu_optimizations()&FC_RAW_BATCH_AND_NATIVE) && identityAxis(p[2],p[10],p[12]) && identityAxis(p[3],p[11],p[13]);
         const bool batch=fc_gpu_optimizations()&FC_RAW_BATCH_AND_NATIVE;
-        s.buffer(0,bytes);s.buffer(1,p.size()*4);s.buffer(2,uint64_t(p[0])*p[1]*4);s.buffer(3,uint64_t(p[0])*p[1]*4);
+        require(p[45]<=1,"Invalid RAW highlight mode");
+        const bool highlights=p[45]!=0;
+        const size_t originalWords=p.size();
+        uint64_t parameterWords=originalWords;
+        if(highlights) {
+            const uint64_t maskWords=uint64_t((p[0]+2)/3)*((p[1]+2)/3);
+            p[50]=(p[0]+s.groupX-1)/s.groupX;p[51]=(p[1]+s.groupY-1)/s.groupY;
+            const uint64_t statsWords=uint64_t(p[50])*p[51]*6;
+            const uint64_t words=p.size()+2*maskWords+statsWords+3;
+            require(words<=UINT32_MAX && words*4<=s.properties.limits.maxStorageBufferRange,"RAW highlight scratch exceeds device limit");
+            p[46]=uint32_t(p.size());p[47]=uint32_t(p.size()+maskWords);
+            p[48]=uint32_t(p.size()+2*maskWords);p[49]=uint32_t(p.size()+2*maskWords+statsWords);
+            parameterWords=words;times[18]=double((words-originalWords)*4);
+        }
+        s.buffer(0,bytes);s.buffer(1,parameterWords*4);s.buffer(2,uint64_t(p[0])*p[1]*4);s.buffer(3,uint64_t(p[0])*p[1]*4);
         s.buffer(4,fast?4:uint64_t(p[0])*p[1]*12);s.buffer(5,fast?4:uint64_t(p[2])*p[1]*12);s.buffer(6,uint64_t(p[2])*p[3]*12);
         std::memcpy(s.buffers[0].mapped,data,bytes);std::memcpy(s.buffers[1].mapped,p.data(),p.size()*4);s.bind();times[0]=ms(started);
         auto batchStart=Clock::now();if(batch) s.begin();
         for(uint32_t stage=0;stage<(fast?3u:5u);++stage) {
             uint32_t pass=fast && stage==2?5:stage;
             auto begin=Clock::now();if(!batch) s.begin();
+            if(stage==0 && s.timestamps) {
+                vkCmdResetQueryPool(s.command,s.timestamps,0,4);
+                vkCmdWriteTimestamp(s.command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,s.timestamps,0);
+            }
             s.dispatch(pass,pass<3?p[0]:p[2],pass<3?p[1]:(pass==3?p[1]:p[3]));
+            if(stage==0 && highlights) {
+                if(s.timestamps) vkCmdWriteTimestamp(s.command,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,s.timestamps,1);
+                for(uint32_t hp=6;hp<=11;++hp) {
+                    s.dispatch(hp,hp<8?(p[0]+2)/3:(hp==9?s.groupX:p[0]),hp<8?(p[1]+2)/3:(hp==9?s.groupY:p[1]));
+                }
+                if(s.timestamps) vkCmdWriteTimestamp(s.command,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,s.timestamps,2);
+            }
+            if(stage==(fast?2u:4u) && s.timestamps)
+                vkCmdWriteTimestamp(s.command,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,s.timestamps,3);
             if(!batch) s.submit();times[stage+1]=ms(begin);
         }
         if(batch) {s.submit();times[1]=ms(batchStart);times[2]=times[3]=times[4]=times[5]=0;}
         auto read=Clock::now();require(static_cast<const uint32_t*>(s.buffers[1].mapped)[15]==0,"Nonfinite Vulkan RAW output");
+        times[12]=batch?times[1]:0;
+        times[19]=static_cast<const uint32_t*>(s.buffers[1].mapped)[52];
+        times[10]=s.dispatches;times[11]=s.submits;times[14]=s.waitMs;times[15]=s.submits;
+        if(s.timestamps) {
+            uint64_t ticks[4]{};
+            // Queries 1/2 are intentionally unused in the reference/off mode.
+            check(vkGetQueryPoolResults(s.device,s.timestamps,0,1,8,&ticks[0],8,VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"RAW start timestamp");
+            check(vkGetQueryPoolResults(s.device,s.timestamps,3,1,8,&ticks[3],8,VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"RAW end timestamp");
+            const uint64_t mask=s.timestampBits==64?UINT64_MAX:((uint64_t(1)<<s.timestampBits)-1);
+            times[13]=double((ticks[3]-ticks[0])&mask)*s.properties.limits.timestampPeriod/1e6;times[16]=1;
+            if(highlights) {
+                check(vkGetQueryPoolResults(s.device,s.timestamps,1,2,16,&ticks[1],8,VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WAIT_BIT),"RAW highlight timestamps");
+                times[17]=double((ticks[2]-ticks[1])&mask)*s.properties.limits.timestampPeriod/1e6;
+            }
+        }
         uint64_t adopted=0;
         if(destination) std::memcpy(destination,s.buffers[6].mapped,size_t(p[2])*p[3]*12);
         else {
@@ -178,14 +231,9 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_rawvulkan_Vul
             FcGpuImage image{b.buffer,b.memory,b.mapped,b.size,rotated?p[3]:p[2],rotated?p[2]:p[3],1};
             adopted=fc_gpu_adopt(s.shared,&image);require(adopted!=0,fc_gpu_error());b={};
         }
-        times[12]=batch?times[1]:0;
         times[6]=ms(read);times[7]=double(s.allocated);
         auto cleanup=Clock::now();s.close();times[8]=ms(cleanup);times[9]=ms(started);
-        const auto gpuEnd=fc_gpu_counts();
-        times[10]=gpuEnd.dispatchCount-gpuStart.dispatchCount;times[11]=gpuEnd.submitCount-gpuStart.submitCount;
-        times[13]=(gpuEnd.gpuNs-gpuStart.gpuNs)/1e6;times[14]=(gpuEnd.waitNs-gpuStart.waitNs)/1e6;
-        times[15]=gpuEnd.waitCount-gpuStart.waitCount;times[16]=gpuEnd.timedSubmissionCount-gpuStart.timedSubmissionCount;
-        env->SetDoubleArrayRegion(timing,0,17,times.data());
+        env->SetDoubleArrayRegion(timing,0,20,times.data());
         if(adopted) {jlong id=static_cast<jlong>(adopted);env->SetLongArrayRegion(imageHandle,0,1,&id);if(env->ExceptionCheck()) {fc_gpu_drop(adopted);return nullptr;}}
         return env->NewStringUTF(s.properties.deviceName);
     } catch(const std::bad_alloc&) {
