@@ -12,27 +12,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-@Composable internal fun IntControl(label: String,value: Int,min: Int,max: Int,default: Int,format: (Int)->String,changed: (Int)->Unit) {
-    var local by remember(value) {mutableFloatStateOf(value.toFloat())}
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val stacked=maxWidth<280.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale>1.2f
-        Column {
-            if(stacked) Text(label)
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                if(!stacked) Text(label,Modifier.weight(1f))
-                Text(format(local.toInt()),color=Accent,modifier=if(stacked) Modifier.weight(1f) else Modifier)
-                CameraIconButton(CameraIcons.Reset,tr(Texts.string.reset_value, label),hint=tr(Texts.string.reset_value, label)) {local=default.toFloat();changed(default)}
-            }
-        }
-    }
-    if(max>min) Slider(local,{local=it},valueRange=min.toFloat()..max.toFloat(),steps=max-min-1,onValueChangeFinished={changed(local.toInt())},modifier=Modifier.heightIn(min=48.dp).semantics {contentDescription=label})
-}
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable internal fun StockOptions(value: String,values: Map<String,String>,change: (String)->Unit) {
     val current=remember {BringIntoViewRequester()}

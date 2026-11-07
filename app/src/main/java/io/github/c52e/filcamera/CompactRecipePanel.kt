@@ -171,7 +171,7 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
     if(item==RecipeItem.Stock || item==RecipeItem.Paper) {
         val paper=item==RecipeItem.Paper
         Box(modifier) {StockPicker(if(paper) tr(Texts.string.paper) else tr(Texts.string.film),if(paper) recipe.paperProfile else recipe.filmProfile,
-            if(paper) FilmStocks.paperChoices(recipe.filmProfile) else FilmStocks.films,compact=true,onCatalog=catalog) {
+            if(paper) FilmStocks.paperChoices(recipe.filmProfile) else FilmStocks.films,onCatalog=catalog) {
             changed(if(paper) recipe.copy(paperProfile=it) else recipe.copy(filmProfile=it))
         }}
     } else item.dial(recipe)?.let {dial->

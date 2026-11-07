@@ -64,10 +64,10 @@ class HeicImportTest {
                 assertTrue(prepared.width.toLong()*prepared.height<=3_000_000)
                 assertTrue(prepared.gpuImage!=0L);assertNull(prepared.pixels)
                 val seed=checkNotNull(FilmEngine.recordedSeed(prepared.record));assertEquals(hash.take(8).toLong(16),seed)
-                val assets=PreviewLutStore(app).prepareAssets()
+                val assets=prepareFilmAssets(app)
                 fun render(recipe: FilmRecipe,cached: Boolean): Pair<JSONObject,java.nio.ByteBuffer> {
                     val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                    val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,SystemClock.elapsedRealtimeNanos(),"",seed,rgba,prepared.pixels,prepared.gpuImage,cacheFilm=cached))
+                    val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,recipe,SystemClock.elapsedRealtimeNanos(),seed,rgba,prepared.pixels,prepared.gpuImage,cacheFilm=cached))
                     assertFalse(result.getBoolean("cancelled"))
                     assertEquals(0L,result.getJSONObject("gpuTransfers").getLong("imageUploadBytes"))
                     val digest=MessageDigest.getInstance("SHA-256");digest.update(rgba.duplicate().apply {clear()})

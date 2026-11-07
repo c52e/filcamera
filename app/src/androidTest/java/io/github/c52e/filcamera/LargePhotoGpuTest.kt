@@ -18,7 +18,7 @@ class LargePhotoGpuTest {
         assumeTrue(InstrumentationRegistry.getArguments().getString("largePhotoRegression")=="true")
         val app=InstrumentationRegistry.getInstrumentation().targetContext
         val task=FutureTask(Callable {
-            val assets=PreviewLutStore(app).prepareAssets()
+            val assets=prepareFilmAssets(app)
             for((width,height) in listOf(259 to 33,7032 to 4688)) {
                 val row=FloatArray(width*3) {i->
                     val x=(i/3).toFloat()/(width-1)
@@ -30,9 +30,9 @@ class LargePhotoGpuTest {
                 }.use {input->
                     NativeBuffer.allocate(width*height*4).use {output->
                         try {
-                            val result=JSONObject(FilmEngine.render(assets.path,"",width,height,
+                            val result=JSONObject(FilmEngine.render(assets.path,width,height,
                                 FilmRecipe(filmDiffusionStrength=0,printDiffusionStrength=0,grainStrength=0),
-                                SystemClock.elapsedRealtimeNanos(),"",123L,output.pixels,input.pixels,cacheFilm=false))
+                                SystemClock.elapsedRealtimeNanos(),123L,output.pixels,input.pixels,cacheFilm=false))
                             assertTrue(result.toString(),!result.getBoolean("cancelled"))
                             val bytes=output.pixels
                             var maxError=0

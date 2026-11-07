@@ -124,7 +124,7 @@ import java.io.File
                 TextButton(onClick=retry,modifier=Modifier.align(Alignment.BottomCenter)) {Text(tr(Texts.string.retry_camera))}
         }
     },tools={
-        if(adjusting) CameraAdjustments(model,camera,recipe,panel,{openPanel("")}) {shutter(48.dp)}
+        if(adjusting) CameraAdjustments(model,recipe,{openPanel("")}) {shutter(48.dp)}
         else if(landscape) Column(Modifier.fillMaxSize().padding(horizontal=8.dp),
             horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.SpaceEvenly) {
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {action(tr(Texts.string.settings)) {openPanel("settings")}}

@@ -131,9 +131,6 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
             }
         }}
     }
-    fun focal(target: Double?) { // Retain the test/legacy entry point; product UI selects an identity.
-        mutable.value.options.firstOrNull {it.targetMm==target && (target!=null || it.lens?.route==selected?.lens?.route)}?.let {selectFocal(it.id)}
-    }
     fun selectFocal(id: String) {
         LocalDiagnostics.event("CAM.selectFocal","option=$id")
         if(mutable.value.busy || saving) return
@@ -225,7 +222,6 @@ class CameraCoordinator(private val context: Context,private val repository: Pho
     }
     fun close() {stop();controller.close()}
     internal fun resetFrameProbe()=effect.resetFrameProbe()
-    internal fun setControlledPreviewToneForTest(enabled: Boolean)=controller.setControlledPreviewTone(enabled)
     internal fun frameProbe()=effect.frameProbe()
     internal fun setPreviewFailureLimitForTest(maxPixels: Long)=controller.setPreviewFailureLimitForTest(maxPixels)
     internal fun previewFailureCountForTest()=controller.previewFailureCountForTest()

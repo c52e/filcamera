@@ -115,15 +115,15 @@ class StandardDngImportTest {
             try {
                 val recipe=repository.captureRecipe(photo)
                 assertEquals(FilmRecipe(),recipe);assertNotNull(photo.displayFile)
-                val assets=PreviewLutStore(app).prepareAssets()
+                val assets=prepareFilmAssets(app)
                 fun render(full: Boolean): Triple<JSONObject,ByteBuffer,Pair<Int,Int>> {
                     val prepared=input.prepare(photo.source,originalHash,CaptureTiming(),full,{false})
                     assertTrue(prepared.record.has("rawImport"))
                     val pixels=FilmOutput.buffer(prepared.width,prepared.height)
                     val seed=checkNotNull(FilmEngine.recordedSeed(prepared.record))
                     assertEquals(originalHash.take(8).toLong(16),seed)
-                    val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
-                        SystemClock.elapsedRealtimeNanos(),"",seed,pixels,prepared.pixels,prepared.gpuImage))
+                    val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,recipe,
+                        SystemClock.elapsedRealtimeNanos(),seed,pixels,prepared.pixels,prepared.gpuImage))
                     assertFalse(result.getBoolean("cancelled"))
                     assertEquals(0L,result.getJSONObject("gpuTransfers").getLong("intermediateReadbackBytes"))
                     PhotoOutput.write(pixels,prepared.width,prepared.height,output,prepared.framing)

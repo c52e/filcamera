@@ -23,7 +23,7 @@ class RenderPerformanceTest {
             try {
                 val timing=CaptureTiming()
                 val prepared=input.prepare(source,hash,timing,true,{false})
-                val assets=PreviewLutStore(app).prepareAssets()
+                val assets=prepareFilmAssets(app)
                 val recipe=FilmRecipe.parse(prepared.record.getJSONObject("recipe"))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
                 val prepareTiming=timing.json()
@@ -32,8 +32,8 @@ class RenderPerformanceTest {
                     if(index==0 || index==4) android.system.Os.setenv("FILMCAMERA_DIFFUSION_CACHE_OFF","1",true)
                     else android.system.Os.unsetenv("FILMCAMERA_DIFFUSION_CACHE_OFF")
                     android.util.Log.i("RenderPerf","BEGIN $index")
-                    val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
-                        android.os.SystemClock.elapsedRealtimeNanos(),"",FilmEngine.recordedSeed(prepared.record) ?: 123L,
+                    val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,recipe,
+                        android.os.SystemClock.elapsedRealtimeNanos(),FilmEngine.recordedSeed(prepared.record) ?: 123L,
                         rgba,prepared.pixels,prepared.gpuImage))
                     check(!result.getBoolean("cancelled"))
                     val digest=java.security.MessageDigest.getInstance("SHA-256")
@@ -55,8 +55,8 @@ class RenderPerformanceTest {
                     for(enabled in listOf(false,true)) {
                         if(enabled) android.system.Os.unsetenv("FILMCAMERA_DIFFUSION_CACHE_OFF")
                         else android.system.Os.setenv("FILMCAMERA_DIFFUSION_CACHE_OFF","1",true)
-                        val result=JSONObject(FilmEngine.render(assets.path,"",resized.width,resized.height,recipe,
-                            android.os.SystemClock.elapsedRealtimeNanos(),"",FilmEngine.recordedSeed(resized.record) ?: 123L,
+                        val result=JSONObject(FilmEngine.render(assets.path,resized.width,resized.height,recipe,
+                            android.os.SystemClock.elapsedRealtimeNanos(),FilmEngine.recordedSeed(resized.record) ?: 123L,
                             output,resized.pixels,resized.gpuImage))
                         check(!result.getBoolean("cancelled"))
                         val digest=java.security.MessageDigest.getInstance("SHA-256")

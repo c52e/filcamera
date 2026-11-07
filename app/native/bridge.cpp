@@ -61,7 +61,7 @@ spk_params modelParams(float ev, bool compensatePrint, bool autoExposure, float 
         spk_params p{};spk_default_params(&p);
         p.disable_buffer_memos=1;p.film_profile=filmProfile;p.print_profile=paperProfile;
         p.input_color_space="ProPhoto RGB";p.input_cctf_decoding=0;p.auto_exposure=autoExposure?1:0;p.exposure_compensation_ev=ev;
-        p.print_exposure=1;p.normalize_print_exposure=1;p.print_exposure_compensation=compensatePrint?1:0;
+        p.normalize_print_exposure=1;p.print_exposure_compensation=compensatePrint?1:0;
         p.grain_active=0;p.halation_active=0;p.glare_active=0;p.dir_diffusion_size_um=0;
         p.scanner_unsharp[0]=p.scanner_unsharp[1]=0;p.scan_film=0;p.output_color_space=SPK_CS_SRGB;p.output_cctf_encoding=0;
         p.input_gamut_compress=1;p.output_gamut_compress=6;p.print_morph_active=1;
@@ -201,37 +201,34 @@ extern "C" JNIEXPORT jint JNICALL Java_io_github_c52e_filcamera_FilmEngine_testD
 extern "C" JNIEXPORT void JNICALL Java_io_github_c52e_filcamera_FilmEngine_testWorkgroup(JNIEnv*,jobject,jint size,jint rawX,jint rawY){fc_gpu_set_workgroup(size,rawX,rawY);}
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_c52e_filcamera_FilmEngine_liveGpuImages(JNIEnv*,jobject){return jlong(fc_gpu_live_images());}
 extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_renderNative(
-    JNIEnv* env,jobject,jstring assets,jstring source,jint width,jint height,jfloat ev,jlong request,jstring target,jboolean compensatePrint,jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile,jboolean dirSpatial,jfloat filmDiffusionStrength,jfloat printDiffusionStrength,jfloat grainStrength,jfloat halationStrength,jlong seed,jobject rgba,jobject memoryInput,jlong gpuImage,jboolean cacheFilm) {
+    JNIEnv* env,jobject,jstring assets,jint width,jint height,jfloat ev,jlong request,jboolean compensatePrint,
+    jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile,
+    jboolean dirSpatial,jfloat filmDiffusionStrength,jfloat printDiffusionStrength,jfloat grainStrength,jfloat halationStrength,
+    jlong seed,jobject rgba,jobject memoryInput,jlong gpuImage,jboolean cacheFilm) {
     long long id=request;RenderScope progress(id);
     try {
         fc_gpu_reset_counts();
         fc_gpu_clear_memory_error();
-        Utf a(env,assets),s(env,source),t(env,target),f(env,filmProfile),paper(env,paperProfile);
+        Utf a(env,assets),f(env,filmProfile),paper(env,paperProfile);
         if(width<1 || height<1 || width>16384 || height>16384 || size_t(width)*height>FC_MAX_PIXELS || !std::isfinite(ev) || std::abs(ev)>2 || id<=0)
             throw std::runtime_error("Unsupported dimensions or exposure");
         if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");
         size_t count=size_t(width)*height*3;
-        std::vector<float> filePixels;
         float* pixels=nullptr;
         const FcGpuImage* deviceInput=gpuImage?fc_gpu_image(uint64_t(gpuImage),nullptr):nullptr;
         if(gpuImage && (!deviceInput || deviceInput->width!=uint32_t(width) || deviceInput->height!=uint32_t(height) || deviceInput->color!=1))
             throw std::runtime_error("Invalid GPU ProPhoto image handle or shape");
         if(deviceInput) pixels=static_cast<float*>(deviceInput->mapped);
-        else if(memoryInput) {
-            pixels=static_cast<float*>(env->GetDirectBufferAddress(memoryInput));
+        else {
+            pixels=memoryInput?static_cast<float*>(env->GetDirectBufferAddress(memoryInput)):nullptr;
             if(!pixels || env->GetDirectBufferCapacity(memoryInput)!=jlong(count*sizeof(float)))
                 throw std::runtime_error("ProPhoto input requires exact-sized direct buffer");
-        } else {
-            if(std::filesystem::file_size(s.bytes)!=count*sizeof(float)) throw std::runtime_error("Input byte size mismatch");
-            filePixels.resize(count);std::ifstream input(s.bytes,std::ios::binary);
-            if(!input.read(reinterpret_cast<char*>(filePixels.data()),count*sizeof(float))) throw std::runtime_error("Cannot read input");
-            pixels=filePixels.data();
+            for(size_t i=0;i<count;i++) if(!std::isfinite(pixels[i])) throw std::runtime_error("Nonfinite input");
         }
-        if(!deviceInput) for(size_t i=0;i<count;i++) if(!std::isfinite(pixels[i])) throw std::runtime_error("Nonfinite input");
         std::call_once(environment,[]{setenv("FILMCAMERA_GPU_CAM16","1",1);});
         if(!context || context->assets!=a.bytes){context.reset();context=std::make_unique<Context>(a.bytes);}
         void* packed=rgba?env->GetDirectBufferAddress(rgba):nullptr;
-        if(rgba && (!packed || env->GetDirectBufferCapacity(rgba)!=jlong(width)*height*4))
+        if(!packed || env->GetDirectBufferCapacity(rgba)!=jlong(width)*height*4)
             throw std::runtime_error("RGBA output requires exact-sized direct buffer");
         struct PackedScope {
             audit::Session& gpu;
@@ -251,7 +248,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         // Pinned Python ScannerParams default. LUT generation keeps this off.
         p.scanner_unsharp[0]=p.scanner_unsharp[1]=.7f;
         if(dirSpatial) {
-            p.film_format_mm=36;p.dir_couplers_active=1;p.dir_amount=1;
+            p.dir_couplers_active=1;p.dir_amount=1;
             p.dir_inhibition_samelayer=1;p.dir_inhibition_interlayer=1;
             p.dir_diffusion_size_um=20;p.dir_diffusion_tail_um=200;p.dir_diffusion_tail_weight=.03f;
             p.grain_active=grainStrength>0;p.grain_blur=.65f;p.grain_blur_dye_clouds_um=1;
@@ -282,7 +279,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         filmKey.dirSpatial=dirSpatial;filmKey.filmDiffusionStrength=filmDiffusionStrength;
         filmKey.grainStrength=grainStrength;filmKey.halationStrength=halationStrength;
         filmKey.exposure=ev;filmKey.gamma=gamma;filmKey.profile=f.bytes;
-        context->gpu.configureFilmCache(cacheFilm && deviceInput && packed?&filmKey:nullptr);
+        context->gpu.configureFilmCache(cacheFilm && deviceInput?&filmKey:nullptr);
 
         spk_image in{pixels,width,height,SPK_CS_PROPHOTO},out{};
         struct Release {spk_image* image;~Release(){spk_image_free(image);}} release{&out};
@@ -292,19 +289,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         if(status==SPK_ERR_CANCELLED || cancelled(&id)){context->gpu.close();return env->NewStringUTF("{\"cancelled\":true}");}
         if(status==SPK_ERR_OOM) throw std::bad_alloc();
         if(status!=SPK_OK) throw std::runtime_error(std::string("Render failed: ")+spk_last_error_message());
-        if((!packed && !out.data) || out.width!=width || out.height!=height) throw std::runtime_error("Output shape mismatch");
-        if(packed) {
-            if(!context->gpu.rgbaReady) throw std::runtime_error("GPU packed output was not produced");
-        } else {
-            for(size_t i=0;i<count;++i) if(!std::isfinite(out.data[i])) throw std::runtime_error("Nonfinite output");
-            std::ofstream file(t.bytes,std::ios::binary|std::ios::trunc);
-            file.write(reinterpret_cast<char*>(out.data),count*sizeof(float));file.close();
-            if(!file) {std::filesystem::remove(t.bytes);throw std::runtime_error("Output write failed");}
-        }
-        if(cancelled(&id)){if(!packed) std::filesystem::remove(t.bytes);context->gpu.close();return env->NewStringUTF("{\"cancelled\":true}");}
+        if(out.width!=width || out.height!=height) throw std::runtime_error("Output shape mismatch");
+        if(!context->gpu.rgbaReady) throw std::runtime_error("GPU packed output was not produced");
+        if(cancelled(&id)){context->gpu.close();return env->NewStringUTF("{\"cancelled\":true}");}
         std::string result="{\"cancelled\":false,\"filmEv\":"+std::to_string(ev)+",\"printExposureCompensation\":"+(compensatePrint?"true":"false")+",\"renderMs\":"+std::to_string(ms)+",\"gpuAllocationBytes\":"+std::to_string(context->gpu.allocationBytes())+"}";
-        result.pop_back();result+=",\"outputTransport\":\"";
-        result+=packed?"gpu-fused-srgb-rgba8":"linear-srgb-f32";result+="\"}";
+        result.pop_back();result+=",\"outputTransport\":\"gpu-fused-srgb-rgba8\"}";
         result.pop_back();result+=",\"filmCache\":{\"state\":\""+std::string(context->gpu.filmCacheState())+
             "\",\"bytes\":"+std::to_string(context->gpu.filmCacheBytes())+"}}";
         char timings[32768]{};
@@ -321,7 +310,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
             ",\"gpuTimestampMs\":"+std::to_string(transfers.gpuNs/1e6)+",\"timedSubmissions\":"+std::to_string(transfers.timedSubmissionCount)+
             ",\"allocationCount\":"+std::to_string(transfers.allocationCount)+",\"currentAllocationBytes\":"+std::to_string(transfers.currentAllocationBytes)+
             ",\"peakAllocationBytes\":"+std::to_string(transfers.peakAllocationBytes)+"}}";
-        if(deviceInput && packed && (transfers.imageUpload || transfers.intermediateReadback)) throw std::runtime_error("Unexpected host transfer in resident render");
+        if(deviceInput && (transfers.imageUpload || transfers.intermediateReadback)) throw std::runtime_error("Unexpected host transfer in resident render");
         return env->NewStringUTF(result.c_str());
     }catch(const std::bad_alloc&){context.reset();if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),"Native allocation failed");return nullptr;}
     catch(const std::exception& e){context.reset();if(cancelled(&id)) return env->NewStringUTF("{\"cancelled\":true}");if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass(fc_gpu_memory_failed()?"java/lang/OutOfMemoryError":"java/lang/IllegalStateException"),e.what());return nullptr;}

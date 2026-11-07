@@ -13,7 +13,7 @@ class GpuPreviewDiagnosticTest {
         val app=InstrumentationRegistry.getInstrumentation().targetContext
         val task=FutureTask {
             val recipe=FilmRecipe.load(app)
-            val assets=PreviewLutStore(app,recipe=recipe).prepareAssets()
+            val assets=prepareFilmAssets(app)
             val failures=ArrayList<String>()
             try { for(relaxed in listOf(true,false)) {
                 val output=File(app.cacheDir,"gpu-preview-probe-$relaxed.rgba16f")

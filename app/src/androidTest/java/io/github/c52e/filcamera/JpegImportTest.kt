@@ -86,10 +86,10 @@ class JpegImportTest {
                 repeat(3) {assertEquals(0.216f,samples.get(),0.01f)}
             } finally {cpu.close()}
             assertSame(prepared,input.prepare(imported.source,hash,timing,cancelled={false}))
-            val assets=PreviewLutStore(context).prepareAssets()
+            val assets=prepareFilmAssets(context)
             fun render(): java.nio.ByteBuffer {
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,FilmRecipe(),SystemClock.elapsedRealtimeNanos(),"",seed,rgba,prepared.pixels,prepared.gpuImage))
+                val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,FilmRecipe(),SystemClock.elapsedRealtimeNanos(),seed,rgba,prepared.pixels,prepared.gpuImage))
                 assertFalse(result.getBoolean("cancelled"))
                 assertEquals(0L,result.getJSONObject("gpuTransfers").getLong("imageUploadBytes"))
                 return rgba

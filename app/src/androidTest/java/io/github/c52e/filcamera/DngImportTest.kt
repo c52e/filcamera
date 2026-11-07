@@ -29,10 +29,10 @@ class DngImportTest {
                 val timing=CaptureTiming()
                 val prepared=input.prepare(photo.source,PairCaptureStore.hash(photo.source),timing,cancelled={false})
                 val recipe=repository.captureRecipe(photo)
-                val assets=PreviewLutStore(app).prepareAssets()
+                val assets=prepareFilmAssets(app)
                 val pixels=FilmOutput.buffer(prepared.width,prepared.height)
-                val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
-                    SystemClock.elapsedRealtimeNanos(),"",checkNotNull(FilmEngine.recordedSeed(prepared.record)),
+                val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,recipe,
+                    SystemClock.elapsedRealtimeNanos(),checkNotNull(FilmEngine.recordedSeed(prepared.record)),
                     pixels,prepared.pixels,prepared.gpuImage))
                 assertFalse(result.getBoolean("cancelled"))
                 assertEquals(0L,result.getJSONObject("gpuTransfers").getLong("intermediateReadbackBytes"))

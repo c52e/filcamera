@@ -36,7 +36,7 @@ class JpegGpuCacheTest {
     private fun render(assets: File,prepared: EditInput.Prepared,recipe: FilmRecipe,enabled: Boolean,seed: Long=0,cpu: java.nio.ByteBuffer?=null,capture: ((java.nio.ByteBuffer)->Unit)?=null): JSONObject {
         val output=FilmOutput.buffer(prepared.width,prepared.height)
         val start=SystemClock.elapsedRealtimeNanos()
-        val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,start,"",seed,output,cpu ?: prepared.pixels,if(cpu==null) prepared.gpuImage else 0,cacheFilm=enabled))
+        val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,recipe,start,seed,output,cpu ?: prepared.pixels,if(cpu==null) prepared.gpuImage else 0,cacheFilm=enabled))
         result.put("callMs",(SystemClock.elapsedRealtimeNanos()-start)/1e6)
         assertFalse(result.getBoolean("cancelled"))
         val digest=MessageDigest.getInstance("SHA-256");digest.update(output.duplicate().apply {clear()})
@@ -66,7 +66,7 @@ class JpegGpuCacheTest {
             assertNull(prepared.pixels);assertTrue(prepared.gpuImage!=0L)
             assertEquals(baseline+1,FilmEngine.liveGpuImages())
             assertSame(prepared,input.prepare(photo.source,hash,CaptureTiming(),false,{false}))
-            val assets=PreviewLutStore(app).prepareAssets();val base=FilmRecipe()
+            val assets=prepareFilmAssets(app);val base=FilmRecipe()
             val (cpu,_)=BitmapCpuReference.prepare(photo.source,false,{false})
             try {
                 val oldBytes=ByteArray(prepared.width*prepared.height*4);val gpuBytes=ByteArray(oldBytes.size)
@@ -146,7 +146,7 @@ class JpegGpuCacheTest {
             try {
                 val prepared=input.prepare(photo.source,PairCaptureStore.hash(photo.source),timing,false,{false})
                 report.put("prepare",timing.json()).put("width",prepared.width).put("height",prepared.height)
-                val assets=PreviewLutStore(app).prepareAssets();val base=FilmRecipe()
+                val assets=prepareFilmAssets(app);val base=FilmRecipe()
                 for(index in 1..3) {
                     val edited=base.copy(print=index,magenta=index)
                     fun record(label: String,result: JSONObject) {result.put("case",label).put("iteration",index);rows.put(result);file.writeText(report.toString(2))}

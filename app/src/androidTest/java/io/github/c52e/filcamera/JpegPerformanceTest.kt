@@ -39,9 +39,9 @@ class JpegPerformanceTest {
                     try {
                         val hash=timing.stage("inputVerify") {repository.verifySource(photo)}
                         val prepared=input.prepare(photo.source,hash,timing,full,{false})
-                        val assets=timing.stage("assets") {PreviewLutStore(app).prepareAssets {true}}
+                        val assets=timing.stage("assets") {prepareFilmAssets(app)}
                         val rgba=timing.stage("outputAllocation") {FilmOutput.buffer(prepared.width,prepared.height)}
-                        val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,FilmRecipe(),SystemClock.elapsedRealtimeNanos(),"",checkNotNull(FilmEngine.recordedSeed(prepared.record)),rgba,prepared.pixels,prepared.gpuImage,cacheFilm=!full))}
+                        val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,FilmRecipe(),SystemClock.elapsedRealtimeNanos(),checkNotNull(FilmEngine.recordedSeed(prepared.record)),rgba,prepared.pixels,prepared.gpuImage,cacheFilm=!full))}
                         check(!result.getBoolean("cancelled"))
                         timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,output,prepared.framing)}
                         runs.put(JSONObject().put("mode",if(full) "full" else "preview").put("iteration",index)

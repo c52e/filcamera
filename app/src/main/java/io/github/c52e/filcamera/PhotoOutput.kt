@@ -9,7 +9,7 @@ import java.nio.ByteBuffer
 object PhotoOutput {
     const val extension="jpg"
     const val mime="image/jpeg"
-    const val productionEncoder="android-bitmap"
+    private const val productionEncoder="android-bitmap"
     data class Encoding(val encoder: String,val encodeMs: Double,val metadataPublishMs: Double)
     fun metadata(file: File,encoding: Encoding?=null)=JSONObject().put("file",file.name).put("format","JPG").put("mime",mime).put("quality",95).put("colorSpace","sRGB")
         .put("encoder",encoding?.encoder ?: "unspecified").put("sampling","4:2:0").apply {
@@ -22,13 +22,11 @@ object PhotoOutput {
         val bitmap=FilmOutput.bitmap(rgba,width,height)
         return try {write(bitmap,file,framing)} finally {bitmap.recycle()}
     }
-    fun write(bitmap: Bitmap,file: File,framing: CaptureFraming?=null)=
-        publish(file,framing,productionEncoder) {pending->pending.outputStream().buffered().use {check(bitmap.compress(Bitmap.CompressFormat.JPEG,95,it))}}
-    private fun publish(file: File,framing: CaptureFraming?,encoder: String,encode: (File)->Unit): Encoding {
+    fun write(bitmap: Bitmap,file: File,framing: CaptureFraming?=null): Encoding {
         val pending=File(file.parentFile,file.name+".pending")
         try {
             val start=android.os.SystemClock.elapsedRealtimeNanos()
-            encode(pending)
+            pending.outputStream().buffered().use {check(bitmap.compress(Bitmap.CompressFormat.JPEG,95,it))}
             val encoded=android.os.SystemClock.elapsedRealtimeNanos()
             android.media.ExifInterface(pending.path).apply {
                     setAttribute(android.media.ExifInterface.TAG_ORIENTATION,"1")
@@ -38,7 +36,7 @@ object PhotoOutput {
                     saveAttributes()
             }
             check(pending.renameTo(file)) { "Cannot publish photo" }
-            return Encoding(encoder,(encoded-start)/1e6,(android.os.SystemClock.elapsedRealtimeNanos()-encoded)/1e6)
+            return Encoding(productionEncoder,(encoded-start)/1e6,(android.os.SystemClock.elapsedRealtimeNanos()-encoded)/1e6)
         } finally { pending.delete() }
     }
     fun result(dir: File)=file(dir,"final")

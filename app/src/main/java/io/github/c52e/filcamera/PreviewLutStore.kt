@@ -53,7 +53,7 @@ class PreviewLutStore(private val context: Context, private val root: File=File(
         try {
             checkCurrent(isCurrent)
             val start=SystemClock.elapsedRealtime()
-            val assets=prepareAssets(isCurrent)
+            val assets=prepareFilmAssets(context,isCurrent)
             checkCurrent(isCurrent)
             val details=JSONObject(FilmEngine.bakePreviewLut(assets.path,request,pending.path,recipe))
             if(details.getBoolean("cancelled")) throw InterruptedException("LUT generation cancelled")
@@ -84,24 +84,6 @@ class PreviewLutStore(private val context: Context, private val root: File=File(
             file.delete()
             root.listFiles()?.filter { it.name.startsWith(prefix) && it.extension=="rgba16f" }?.forEach { it.delete() }
         }
-    }
-    fun prepareAssets(isCurrent: () -> Boolean = {true}): File {
-        val root=File(context.filesDir,"lab/assets")
-        val assets=identity.getJSONObject("assets")
-        for(name in assets.keys()) {
-            checkCurrent(isCurrent)
-            val file=File(root,name)
-            require(file.canonicalPath.startsWith(root.canonicalPath+File.separator))
-            val expected=assets.getString(name)
-            if(!file.isFile || PairCaptureStore.hash(file)!=expected) {
-                file.parentFile!!.mkdirs();val pending=File(file.parentFile,file.name+".lut-pending")
-                try {
-                    context.assets.open("lab/assets/$name").use { input -> pending.outputStream().use { input.copyTo(it) } }
-                    require(PairCaptureStore.hash(pending)==expected) { "Profile checksum mismatch: $name" };check(pending.renameTo(file))
-                } finally { pending.delete() }
-            }
-        }
-        return root
     }
     private fun checkCurrent(current: () -> Boolean) { if(!current()) throw InterruptedException("LUT request superseded") }
 }

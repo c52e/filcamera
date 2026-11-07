@@ -1,5 +1,6 @@
 package io.github.c52e.filcamera
 
+import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.os.LocaleList
 import android.os.SystemClock
@@ -29,6 +30,26 @@ class PublicProjectTest {
             val expected=assets.getString(name)
             assertEquals(expected,preview.getJSONObject("assets").getString(name))
             assertEquals(expected,PreviewLut.digest(app.assets.open("lab/assets/$name").use {it.readBytes()}))
+        }
+    }
+
+    @Test fun filmAssetsRepairCorruptFiles() {
+        val directory = File(app.cacheDir, "film-assets-test-${SystemClock.elapsedRealtimeNanos()}")
+        val context = object : ContextWrapper(app) {
+            override fun getFilesDir() = directory
+        }
+        val assets = app.assets.open("lab/manifest.json").bufferedReader().use { org.json.JSONObject(it.readText()).getJSONObject("assets") }
+        val name = assets.keys().next()
+        val corrupt = File(directory, "lab/assets/$name")
+        try {
+            corrupt.parentFile!!.mkdirs()
+            corrupt.writeBytes(byteArrayOf(0))
+            assertThrows(InterruptedException::class.java) { prepareFilmAssets(context) { false } }
+            assertArrayEquals(byteArrayOf(0), corrupt.readBytes())
+            assertEquals(File(directory, "lab/assets"), prepareFilmAssets(context))
+            assertEquals(assets.getString(name), PairCaptureStore.hash(corrupt))
+        } finally {
+            directory.deleteRecursively()
         }
     }
 

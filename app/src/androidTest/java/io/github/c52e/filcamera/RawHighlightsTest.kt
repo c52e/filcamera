@@ -143,12 +143,12 @@ class RawHighlightsTest {
                     }
                 }
             }
-            val assets=PreviewLutStore(app).prepareAssets();val recipe=FilmRecipe.restore(raw.record)
+            val assets=prepareFilmAssets(app);val recipe=FilmRecipe.restore(raw.record)
             for(enabled in listOf(false,true)) {
                 val input=VulkanRawDeveloper(3_000_000,enabled).developGpuProPhoto(raw.frame,raw.rotation)
                 input.use {
                     val rgba=FilmOutput.buffer(it.width,it.height)
-                    FilmEngine.render(assets.path,file.path,it.width,it.height,recipe,android.os.SystemClock.elapsedRealtimeNanos(),"",
+                    FilmEngine.render(assets.path,it.width,it.height,recipe,android.os.SystemClock.elapsedRealtimeNanos(),
                         FilmEngine.recordedSeed(raw.record) ?: 0L,rgba=rgba,gpuImage=it.gpuImage)
                     val bitmap=FilmOutput.bitmap(rgba,it.width,it.height)
                     try {PhotoOutput.write(bitmap,File(app.cacheDir,"highlight-${if(enabled) "on" else "off"}.jpg"))}

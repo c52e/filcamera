@@ -60,10 +60,10 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 val timing=CaptureTiming()
                 val hash=timing.stage("inputVerify") {repository.verifySource(original)}
                 val prepared=input.prepare(original.source,hash,timing,cancelled={!current()})
-                val assets=PreviewLutStore(context).prepareAssets(::current)
+                val assets=prepareFilmAssets(context,::current)
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,requested,id,"",seed,rgba,prepared.pixels,prepared.gpuImage,cacheFilm=true))}
+                val result=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,requested,id,seed,rgba,prepared.pixels,prepared.gpuImage,cacheFilm=true))}
                 if(result.getBoolean("cancelled") || !current()) throw InterruptedException()
                 timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
                 rendered=true
@@ -98,10 +98,10 @@ class EditSession(private val context: Context,private val repository: PhotoRepo
                 // This explicit save owns its request independently of cancelled editing previews.
                 input.close()
                 val prepared=input.prepare(original.source,hash,timing,true,{false})
-                val assets=PreviewLutStore(context).prepareAssets {true}
+                val assets=prepareFilmAssets(context)
                 val seed=requireNotNull(FilmEngine.recordedSeed(prepared.record))
                 val rgba=FilmOutput.buffer(prepared.width,prepared.height)
-                val rendered=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,frozen,SystemClock.elapsedRealtimeNanos(),"",seed,rgba,prepared.pixels,prepared.gpuImage))}
+                val rendered=timing.stage("nativeCall") {JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,frozen,SystemClock.elapsedRealtimeNanos(),seed,rgba,prepared.pixels,prepared.gpuImage))}
                 check(!rendered.getBoolean("cancelled"))
                 val encoding=timing.stage("photoEncode") {PhotoOutput.write(rgba,prepared.width,prepared.height,file,prepared.framing)}
                 rendered.put("output",PhotoOutput.metadata(file,encoding))

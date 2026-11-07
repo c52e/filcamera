@@ -19,14 +19,14 @@ class GrainRenderGpuTest {
             val input=ByteBuffer.allocateDirect(width*height*12).order(ByteOrder.nativeOrder())
             val floats=input.asFloatBuffer()
             repeat(width*height) {p->repeat(3) {floats.put(.01f+.4f*(p%width)/width)}}
-            val assets=PreviewLutStore(app).prepareAssets()
+            val assets=prepareFilmAssets(app)
             try {
                 FilmEngine.testResidentEngine(true)
                 val output=FilmOutput.buffer(width,height)
                 val base=FilmRecipe(filmDiffusionStrength=0,printDiffusionStrength=0,halationStrength=0)
                 fun render(recipe: FilmRecipe): ByteArray {
-                    val result=JSONObject(FilmEngine.render(assets.path,"",width,height,recipe,
-                        android.os.SystemClock.elapsedRealtimeNanos(),"",123L,output,input))
+                    val result=JSONObject(FilmEngine.render(assets.path,width,height,recipe,
+                        android.os.SystemClock.elapsedRealtimeNanos(),123L,output,input))
                     assertFalse(result.getBoolean("cancelled"))
                     val pixels=ByteArray(output.capacity())
                     output.duplicate().apply {clear();get(pixels)}
@@ -59,10 +59,10 @@ class GrainRenderGpuTest {
                 val prepared=input.prepare(source,hash,CaptureTiming(),fullResolution=true,cancelled={false})
                 android.util.Log.i("GrainRenderProbe","retained DNG ${prepared.width}x${prepared.height}")
                 val recipe=FilmRecipe.parse(prepared.record.getJSONObject("recipe"))
-                val assets=PreviewLutStore(app).prepareAssets()
+                val assets=prepareFilmAssets(app)
                 val output=FilmOutput.buffer(prepared.width,prepared.height)
-                val result=JSONObject(FilmEngine.render(assets.path,"",prepared.width,prepared.height,recipe,
-                    android.os.SystemClock.elapsedRealtimeNanos(),"",FilmEngine.recordedSeed(prepared.record) ?: 123L,
+                val result=JSONObject(FilmEngine.render(assets.path,prepared.width,prepared.height,recipe,
+                    android.os.SystemClock.elapsedRealtimeNanos(),FilmEngine.recordedSeed(prepared.record) ?: 123L,
                     output,prepared.pixels,prepared.gpuImage))
                 assertFalse(result.getBoolean("cancelled"))
                 assertEquals(hash,PairCaptureStore.hash(source))

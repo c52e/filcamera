@@ -101,10 +101,10 @@ class PairCaptureStore(private val context: Context) {
                 }
                 frame.close()
                 val w=linear.width;val h=linear.height
-                timing.stage("assetVerify") { verifyAssets() }
+                val assets=timing.stage("assetVerify") {prepareFilmAssets(context)}
                 val rgba=timing.stage("outputAllocate") { FilmOutput.buffer(w,h) }
-                val details=timing.stage("nativeCall") { JSONObject(FilmEngine.render(File(lab,"assets").path,"",w,h,recipe,
-                    SystemClock.elapsedRealtimeNanos(),"",grainSeed,rgba,linear.cpuPixels,linear.gpuImage)) }
+                val details=timing.stage("nativeCall") { JSONObject(FilmEngine.render(assets.path,w,h,recipe,
+                    SystemClock.elapsedRealtimeNanos(),grainSeed,rgba,linear.cpuPixels,linear.gpuImage)) }
                 check(!details.getBoolean("cancelled"))
                 val encoding=timing.stage("photoEncode") { PhotoOutput.write(rgba,w,h,File(dir,"final.jpg"),selected) }
                 report.put("output",PhotoOutput.metadata(File(dir,"final.jpg"),encoding))
@@ -122,23 +122,6 @@ class PairCaptureStore(private val context: Context) {
             output.writeText(report.toString(2))
         }
         return dir
-    }
-    private fun verifyAssets() {
-        val manifest=JSONObject(context.assets.open("lab/manifest.json").bufferedReader().use { it.readText() })
-        val entries=manifest.getJSONObject("assets")
-        for(key in entries.keys()) {
-            val file=File(lab,"assets/$key")
-            require(file.canonicalPath.startsWith(File(lab,"assets").canonicalPath+File.separator))
-            if(!file.exists()) {
-                file.parentFile!!.mkdirs()
-                val pending=File(file.parentFile,file.name+".pair-pending")
-                try {
-                    context.assets.open("lab/assets/$key").use { source -> pending.outputStream().use { source.copyTo(it) } }
-                    require(hash(pending)==entries.getString(key));check(pending.renameTo(file))
-                } finally { pending.delete() }
-            }
-            require(hash(file)==entries.getString(key)) { "Asset checksum mismatch: $key" }
-        }
     }
     companion object {
         @Volatile var verifyDngRoundTrip=false // Instrumentation only; no extra develop in production.
