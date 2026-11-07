@@ -21,9 +21,10 @@ This does not change the Camera2 ISP/GLES viewfinder path.
 
 Darkroom previews retain one GPU float32 CMY negative after film development,
 including fixed-seed grain. The cache uses the immutable GPU input image ID,
-dimensions, film profile/exposure/development, film spatial switches, grain seed
-and numerical execution settings. Paper profile, print exposure/compensation,
-contrast, filters and print diffusion reuse it and rerun printing plus scanning.
+dimensions, film profile/exposure/development, spatial policy, film diffusion,
+grain and halation strengths, grain seed and numerical execution settings.
+Paper profile, print exposure/compensation, contrast, filters and print diffusion
+reuse it and rerun printing plus scanning.
 Film-side edits replace it. A device copy restores the negative into writable
 scratch before printing, so spatial ping-pong cannot mutate the cached plane.
 No intermediate image crosses to the CPU. The 3 MP preview adds at most 36 MB

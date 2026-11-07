@@ -201,7 +201,7 @@ extern "C" JNIEXPORT jint JNICALL Java_io_github_c52e_filcamera_FilmEngine_testD
 extern "C" JNIEXPORT void JNICALL Java_io_github_c52e_filcamera_FilmEngine_testWorkgroup(JNIEnv*,jobject,jint size,jint rawX,jint rawY){fc_gpu_set_workgroup(size,rawX,rawY);}
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_c52e_filcamera_FilmEngine_liveGpuImages(JNIEnv*,jobject){return jlong(fc_gpu_live_images());}
 extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_renderNative(
-    JNIEnv* env,jobject,jstring assets,jstring source,jint width,jint height,jfloat ev,jlong request,jstring target,jboolean compensatePrint,jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile,jboolean dirSpatial,jboolean filmDiffusion,jboolean printDiffusion,jboolean grain,jboolean halation,jlong seed,jobject rgba,jobject memoryInput,jlong gpuImage,jboolean cacheFilm) {
+    JNIEnv* env,jobject,jstring assets,jstring source,jint width,jint height,jfloat ev,jlong request,jstring target,jboolean compensatePrint,jfloat gamma,jfloat printEv,jfloat contrast,jfloat magenta,jfloat yellow,jstring filmProfile,jstring paperProfile,jboolean dirSpatial,jfloat filmDiffusionStrength,jfloat printDiffusionStrength,jfloat grainStrength,jfloat halationStrength,jlong seed,jobject rgba,jobject memoryInput,jlong gpuImage,jboolean cacheFilm) {
     long long id=request;RenderScope progress(id);
     try {
         fc_gpu_reset_counts();
@@ -241,8 +241,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         context->gpu.inputImage=uint64_t(gpuImage);
         auto p=modelParams(ev,compensatePrint,true,gamma,printEv,contrast,magenta,yellow,f.bytes,paper.bytes);
         if(seed<0 || seed>0xffffffffLL) throw std::runtime_error("Invalid grain seed");
-        if(!dirSpatial && (filmDiffusion || printDiffusion || grain || halation)) throw std::runtime_error("Invalid spatial policy");
+        for(float strength:{filmDiffusionStrength,printDiffusionStrength,grainStrength,halationStrength}) {
+            if(!std::isfinite(strength) || strength<0 || strength>2) throw std::runtime_error("Invalid effect strength");
+            if(!dirSpatial && strength>0) throw std::runtime_error("Invalid spatial policy");
+        }
         spk::lab_grain_seed=uint32_t(seed);
+        spk::lab_grain_strength=grainStrength;
         p.film_format_mm=36;
         // Pinned Python ScannerParams default. LUT generation keeps this off.
         p.scanner_unsharp[0]=p.scanner_unsharp[1]=.7f;
@@ -250,17 +254,17 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
             p.film_format_mm=36;p.dir_couplers_active=1;p.dir_amount=1;
             p.dir_inhibition_samelayer=1;p.dir_inhibition_interlayer=1;
             p.dir_diffusion_size_um=20;p.dir_diffusion_tail_um=200;p.dir_diffusion_tail_weight=.03f;
-            p.grain_active=grain;p.grain_blur=.65f;p.grain_blur_dye_clouds_um=1;
+            p.grain_active=grainStrength>0;p.grain_blur=.65f;p.grain_blur_dye_clouds_um=1;
             // Original pinned Python defaults; upstream Android's older C defaults differ.
             p.grain_particle_area_um2=.2f;
             p.grain_particle_scale[0]=1.6f;p.grain_particle_scale[1]=1.6f;p.grain_particle_scale[2]=3.2f;
             p.grain_particle_scale_layers[0]=2;p.grain_particle_scale_layers[1]=1;p.grain_particle_scale_layers[2]=.5f;
             p.grain_density_min[0]=p.grain_density_min[1]=p.grain_density_min[2]=.03f;
             p.grain_uniformity[0]=.97f;p.grain_uniformity[1]=.99f;p.grain_uniformity[2]=.97f;
-            p.halation_active=halation;p.halation_scatter_amount=1;p.halation_scatter_spatial_scale=1;
-            p.halation_halation_amount=1;p.halation_halation_spatial_scale=1;
-            p.camera_diffusion_active=filmDiffusion;p.enlarger_diffusion_active=printDiffusion;
-            p.camera_diffusion_strength=p.enlarger_diffusion_strength=.5f;
+            p.halation_active=halationStrength>0;p.halation_scatter_amount=std::min(halationStrength,1.0f);p.halation_scatter_spatial_scale=1;
+            p.halation_halation_amount=halationStrength;p.halation_halation_spatial_scale=1;
+            p.camera_diffusion_active=filmDiffusionStrength>0;p.enlarger_diffusion_active=printDiffusionStrength>0;
+            p.camera_diffusion_strength=filmDiffusionStrength;p.enlarger_diffusion_strength=printDiffusionStrength;
             p.camera_diffusion_spatial_scale=p.enlarger_diffusion_spatial_scale=1;
             p.camera_diffusion_halo_warmth=p.enlarger_diffusion_halo_warmth=0;
             p.camera_diffusion_family=p.enlarger_diffusion_family=0;
@@ -275,7 +279,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         filmKey.inputImage=uint64_t(gpuImage);filmKey.width=uint32_t(width);filmKey.height=uint32_t(height);
         filmKey.seed=uint32_t(seed);filmKey.optimizations=fc_gpu_optimizations();filmKey.workgroup=fc_gpu_workgroup();
         filmKey.storage=fc_gpu_selected_storage();filmKey.relaxed=fc_gpu_relaxed();
-        filmKey.dirSpatial=dirSpatial;filmKey.filmDiffusion=filmDiffusion;filmKey.grain=grain;filmKey.halation=halation;
+        filmKey.dirSpatial=dirSpatial;filmKey.filmDiffusionStrength=filmDiffusionStrength;
+        filmKey.grainStrength=grainStrength;filmKey.halationStrength=halationStrength;
         filmKey.exposure=ev;filmKey.gamma=gamma;filmKey.profile=f.bytes;
         context->gpu.configureFilmCache(cacheFilm && deviceInput && packed?&filmKey:nullptr);
 

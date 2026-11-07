@@ -66,9 +66,41 @@ class PublicProjectTest {
         val recipe = FilmRecipe()
         assertEquals(recipe, FilmRecipe.parse(recipe.json()))
         assertEquals(recipe.hash, FilmRecipe.parse(recipe.json()).hash)
-        assertTrue(recipe.filmDiffusion && recipe.printDiffusion && recipe.grain && recipe.halation)
+        assertEquals(500,recipe.filmDiffusionStrength)
+        assertEquals(500,recipe.printDiffusionStrength)
+        assertEquals(1000,recipe.grainStrength)
+        assertEquals(1000,recipe.halationStrength)
         assertEquals(FilmStocks.AUTO_PAPER, recipe.paperProfile)
-        assertEquals(recipe.colorHash, recipe.copy(grain=false, halation=false).colorHash)
+        assertEquals(recipe.colorHash, recipe.copy(grainStrength=0, halationStrength=0).colorHash)
+        val adjusted=recipe.copy(filmDiffusionStrength=125,printDiffusionStrength=780,grainStrength=600,halationStrength=1800)
+        assertEquals(adjusted,FilmRecipe.parse(adjusted.json()))
+        assertEquals(recipe.colorHash,adjusted.colorHash)
+        assertNotEquals(recipe.hash,adjusted.hash)
+
+        for(version in listOf(2,3)) {
+            val base=if(version==2) recipe.copy(paperProfile="kodak_portra_endura") else recipe
+            val old=base.json().put("version",version)
+            val effects=listOf("filmDiffusion","printDiffusion","grain","halation")
+            for(effect in effects) old.remove(effect+"Strength")
+            for(mask in 0..15) {
+                val enabled=effects.mapIndexed {index,effect->
+                    (mask and (1 shl index)!=0).also {old.put(effect,it)}
+                }
+                val migrated=FilmRecipe.parse(old)
+                assertEquals(base.copy(
+                    filmDiffusionStrength=if(enabled[0]) 500 else 0,
+                    printDiffusionStrength=if(enabled[1]) 500 else 0,
+                    grainStrength=if(enabled[2]) 1000 else 0,
+                    halationStrength=if(enabled[3]) 1000 else 0
+                ),migrated)
+                assertTrue(migrated.dirSpatial)
+                assertEquals(base.colorHash,migrated.colorHash)
+            }
+        }
+        val legacy=FilmRecipe.legacy()
+        val old=legacy.json().put("version",1)
+        assertEquals(legacy,FilmRecipe.parse(old))
+        assertFalse(legacy.dirSpatial)
     }
 
     @Test fun publicAssetsBakeRepeatableLutAndRejectCorruption() {

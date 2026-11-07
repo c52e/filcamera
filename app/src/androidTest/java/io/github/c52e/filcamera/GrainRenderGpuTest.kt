@@ -23,10 +23,24 @@ class GrainRenderGpuTest {
             try {
                 FilmEngine.testResidentEngine(true)
                 val output=FilmOutput.buffer(width,height)
-                val result=JSONObject(FilmEngine.render(assets.path,"",width,height,
-                    FilmRecipe().copy(filmDiffusion=false,printDiffusion=false,halation=false),
-                    android.os.SystemClock.elapsedRealtimeNanos(),"",123L,output,input))
-                assertFalse(result.getBoolean("cancelled"))
+                val base=FilmRecipe(filmDiffusionStrength=0,printDiffusionStrength=0,halationStrength=0)
+                fun render(recipe: FilmRecipe): ByteArray {
+                    val result=JSONObject(FilmEngine.render(assets.path,"",width,height,recipe,
+                        android.os.SystemClock.elapsedRealtimeNanos(),"",123L,output,input))
+                    assertFalse(result.getBoolean("cancelled"))
+                    val pixels=ByteArray(output.capacity())
+                    output.duplicate().apply {clear();get(pixels)}
+                    return pixels
+                }
+                val off=render(base.copy(grainStrength=0))
+                val normal=render(base)
+                val light=render(base.copy(grainStrength=500))
+                val strong=render(base.copy(grainStrength=2000))
+                assertFalse(off.contentEquals(normal))
+                assertFalse(light.contentEquals(off))
+                assertFalse(light.contentEquals(normal))
+                assertFalse(strong.contentEquals(normal))
+                assertArrayEquals(light,render(base.copy(grainStrength=500)))
             } finally {FilmEngine.close();FilmEngine.testResidentEngine(false)}
         }
         FilmWorker.execute {task.run()};task.get(120,TimeUnit.SECONDS)

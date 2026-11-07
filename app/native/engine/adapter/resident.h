@@ -16,14 +16,15 @@ struct FilmCacheKey {
     uint64_t inputImage=0;
     uint32_t width=0,height=0,seed=0,optimizations=0,workgroup=0;
     int storage=0;
-    bool relaxed=false,dirSpatial=false,filmDiffusion=false,grain=false,halation=false;
+    bool relaxed=false,dirSpatial=false;
+    float filmDiffusionStrength=0,grainStrength=0,halationStrength=0;
     float exposure=0,gamma=1;
     std::string profile;
     bool operator==(const FilmCacheKey& b) const {
         return std::tie(inputImage,width,height,seed,optimizations,workgroup,storage,relaxed,
-                        dirSpatial,filmDiffusion,grain,halation,exposure,gamma,profile)==
+                        dirSpatial,filmDiffusionStrength,grainStrength,halationStrength,exposure,gamma,profile)==
                std::tie(b.inputImage,b.width,b.height,b.seed,b.optimizations,b.workgroup,b.storage,b.relaxed,
-                        b.dirSpatial,b.filmDiffusion,b.grain,b.halation,b.exposure,b.gamma,b.profile);
+                        b.dirSpatial,b.filmDiffusionStrength,b.grainStrength,b.halationStrength,b.exposure,b.gamma,b.profile);
     }
 };
 class Session {
@@ -59,6 +60,7 @@ public:
     void importDevice(FcGpuBufferView source,size_t bytes);
     void importBlend(FcGpuBufferView source,FcGpuBufferView filtered,size_t bytes);
     void checkpoint();
+    void blendCheckpoint(FcGpuBufferView target,float amount);
     void configureFilmCache(const FilmCacheKey* key);
     bool filmCacheEnabled() const {return filmCacheEnabled_;}
     bool reuseFilm(size_t count);

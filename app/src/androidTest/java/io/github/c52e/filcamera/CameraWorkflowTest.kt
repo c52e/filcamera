@@ -22,13 +22,7 @@ import java.util.concurrent.TimeUnit
 
 /** On-device acceptance. Adds a photo/copy but never deletes existing user media. */
 class CameraWorkflowTest {
-    @get:Rule(order=0) val foreground=object: org.junit.rules.ExternalResource() {
-        override fun before() {
-            val instrumentation=InstrumentationRegistry.getInstrumentation()
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
-                "am start -W -n ${instrumentation.targetContext.packageName}/io.github.c52e.filcamera.CameraActivity")).use {it.readBytes()}
-        }
-    }
+    @get:Rule(order=0) val foreground=foregroundActivityRule(CameraActivity::class.java)
     @get:Rule(order=1) val ui=createAndroidComposeRule<CameraActivity>()
     private fun <T> owned(body: ()->T): T {
         val task=FutureTask(Callable {body()});FilmWorker.execute {task.run()};return task.get(120,TimeUnit.SECONDS)
@@ -126,7 +120,6 @@ class CameraWorkflowTest {
         }
     }
 }
-
 
 // Keep API 33 types out of JUnit-reflected methods and synthetic lambda signatures on API 29–32.
 @androidx.annotation.RequiresApi(33)

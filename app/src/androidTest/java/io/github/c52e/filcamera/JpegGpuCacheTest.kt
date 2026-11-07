@@ -96,7 +96,7 @@ class JpegGpuCacheTest {
                     }
                 } finally {FilmEngine.testResidentEngine(false);bitmap.recycle()}
             } finally {cpu.close()}
-            for(recipe in listOf(base.copy(print=2),base.copy(contrast=25),base.copy(magenta=3),base.copy(yellow=3),base.copy(printDiffusion=false))) {
+            for(recipe in listOf(base.copy(print=2),base.copy(contrast=25),base.copy(magenta=3),base.copy(yellow=3),base.copy(printDiffusionStrength=0))) {
                 state(render(assets,prepared,base,true),"miss")
                 val cached=render(assets,prepared,recipe,true);state(cached,"hit")
                 val control=render(assets,prepared,recipe,false);state(control,"disabled");equal(cached,control)

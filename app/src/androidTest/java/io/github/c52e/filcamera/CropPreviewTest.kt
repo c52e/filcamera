@@ -16,13 +16,7 @@ import io.github.c52e.filcamera.strings.R as Texts
 
 /** Real camera acceptance: exercises buffer changes and crop-only transitions in both directions. */
 class CropPreviewTest {
-    @get:Rule(order=0) val foreground=object: org.junit.rules.ExternalResource() {
-        override fun before() {
-            val i=InstrumentationRegistry.getInstrumentation()
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(i.uiAutomation.executeShellCommand(
-                "am start -W -n ${i.targetContext.packageName}/io.github.c52e.filcamera.CameraActivity")).use {it.readBytes()}
-        }
-    }
+    @get:Rule(order=0) val foreground=foregroundActivityRule(CameraActivity::class.java)
     @get:Rule(order=1) val ui=createAndroidComposeRule<CameraActivity>()
 
     @Test fun rejectedLargeBuffersRecoverOnSameLensAndStayRemembered() {

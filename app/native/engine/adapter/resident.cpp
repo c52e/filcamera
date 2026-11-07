@@ -307,6 +307,15 @@ void Session::checkpoint() {
     impl->make(impl->saved,impl->activeBytes);
     if(!fc_gpu_copy(impl->shared,deviceView().buffer,impl->saved.handle,impl->activeBytes)) throw std::runtime_error("Resident checkpoint failed");
 }
+void Session::blendCheckpoint(FcGpuBufferView target,float amount) {
+    if(!impl || !impl->saved.handle || target.owner!=impl->shared || !target.buffer ||
+       target.element!=FC_GPU_F32 || target.bytes!=impl->activeBytes || impl->saved.size!=target.bytes)
+        throw std::runtime_error("Invalid resident blend buffers");
+    if(!fc_gpu_plane(impl->shared,impl->saved.handle,impl->saved.size,target.buffer,target.bytes,
+                     uint32_t(target.bytes/sizeof(float)),1,0,1,0,2,amount))
+        throw std::runtime_error("Resident grain blend failed");
+    impl->release(impl->saved);
+}
 void Session::importBlend(FcGpuBufferView source,FcGpuBufferView filtered,size_t bytes) {
     if(!impl || source.owner!=impl->shared || filtered.owner!=impl->shared || !source.buffer || !filtered.buffer || source.element!=FC_GPU_F32 || filtered.element!=FC_GPU_F32 || !bytes || bytes!=impl->activeBytes || bytes>source.bytes || bytes>filtered.bytes)
         throw std::runtime_error("Invalid deferred diffusion buffers");

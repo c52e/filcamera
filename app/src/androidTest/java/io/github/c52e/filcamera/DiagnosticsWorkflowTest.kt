@@ -26,13 +26,7 @@ import java.util.zip.ZipFile
 
 /** Exercises real Camera2 failure + screenshot/copy/share, without changing user media or camera IDs. */
 class DiagnosticsWorkflowTest {
-    @get:Rule(order=0) val foreground=object: org.junit.rules.ExternalResource() {
-        override fun before() {
-            val instrumentation=InstrumentationRegistry.getInstrumentation()
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
-                "am start -W -n ${instrumentation.targetContext.packageName}/io.github.c52e.filcamera.CameraActivity")).use {it.readBytes()}
-        }
-    }
+    @get:Rule(order=0) val foreground=foregroundActivityRule(CameraActivity::class.java)
     @get:Rule(order=1) val ui=createAndroidComposeRule<CameraActivity>()
 
     @Test fun boundedRedactedReports() {

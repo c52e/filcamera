@@ -4,7 +4,6 @@ import android.os.SystemClock
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
-import androidx.test.platform.app.InstrumentationRegistry
 import io.github.c52e.filcamera.strings.R as Texts
 import io.github.c52e.filcamera.strings.tr
 import org.junit.Assert.*
@@ -15,13 +14,7 @@ import java.util.concurrent.TimeUnit
 
 /** On-device regression; retains the captured test photo. */
 class PreviewCapturePauseTest {
-    @get:Rule(order=0) val foreground=object: org.junit.rules.ExternalResource() {
-        override fun before() {
-            val instrumentation=InstrumentationRegistry.getInstrumentation()
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
-                "am start -W -n ${instrumentation.targetContext.packageName}/io.github.c52e.filcamera.CameraActivity")).use {it.readBytes()}
-        }
-    }
+    @get:Rule(order=0) val foreground=foregroundActivityRule(CameraActivity::class.java)
     @get:Rule(order=1) val ui=createAndroidComposeRule<CameraActivity>()
     @Test fun previewStopsAfterCaptureAndResumesAfterProcessing() {
         lateinit var model: CameraViewModel

@@ -71,7 +71,8 @@ class GpuFilmCacheTest {
                     "print-exposure" to base.copy(print=2), "print-compensation" to base.copy(compensate=true),
                     "paper-contrast" to base.copy(contrast=25), "magenta" to base.copy(magenta=4),
                     "yellow" to base.copy(yellow=4), "paper-profile" to base.copy(paperProfile="kodak_supra_endura"),
-                    "print-diffusion" to base.copy(printDiffusion=false))
+                    "print-diffusion" to base.copy(printDiffusionStrength=0),
+                    "print-diffusion-strength" to base.copy(printDiffusionStrength=760))
                 for((label,recipe) in printEdits) {
                     render("$label-prime")
                     val cached=render("$label-cached",recipe);state(cached,"hit")
@@ -81,8 +82,11 @@ class GpuFilmCacheTest {
                 val filmEdits=listOf(
                     "film-exposure" to base.copy(film=2), "development" to base.copy(development=22),
                     "film-profile" to base.copy(filmProfile="kodak_portra_160"),
-                    "film-diffusion" to base.copy(filmDiffusion=false), "grain" to base.copy(grain=false),
-                    "halation" to base.copy(halation=false), "legacy-spatial" to FilmRecipe.legacy())
+                    "film-diffusion" to base.copy(filmDiffusionStrength=0), "grain" to base.copy(grainStrength=0),
+                    "halation" to base.copy(halationStrength=0), "legacy-spatial" to FilmRecipe.legacy(),
+                    "film-diffusion-strength" to base.copy(filmDiffusionStrength=710),
+                    "grain-strength" to base.copy(grainStrength=650),
+                    "halation-strength" to base.copy(halationStrength=1500))
                 for((label,recipe) in filmEdits) {
                     render("$label-prime")
                     val changed=render("$label-invalidated",recipe);state(changed,"miss")

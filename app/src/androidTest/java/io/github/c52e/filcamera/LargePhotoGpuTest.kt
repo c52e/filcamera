@@ -31,7 +31,7 @@ class LargePhotoGpuTest {
                     NativeBuffer.allocate(width*height*4).use {output->
                         try {
                             val result=JSONObject(FilmEngine.render(assets.path,"",width,height,
-                                FilmRecipe(filmDiffusion=false,printDiffusion=false,grain=false,halation=true),
+                                FilmRecipe(filmDiffusionStrength=0,printDiffusionStrength=0,grainStrength=0),
                                 SystemClock.elapsedRealtimeNanos(),"",123L,output.pixels,input.pixels,cacheFilm=false))
                             assertTrue(result.toString(),!result.getBoolean("cancelled"))
                             val bytes=output.pixels
