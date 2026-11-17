@@ -42,6 +42,7 @@ enum class InputColorSpace {
 struct FilmingParams {
     InputColorSpace input_color_space = InputColorSpace::kProPhotoRGB;
     bool input_cctf_decoding = false;
+    bool tungsten_reference = false;
 
     // Exposure (auto-exposure off, exposure_compensation_ev == 0 under goldens).
     double exposure_compensation_ev = 0.0;

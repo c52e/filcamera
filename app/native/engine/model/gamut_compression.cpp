@@ -1136,15 +1136,6 @@ void audit_print_expose(const float* input,float* output,int npix,const float* c
     audit_spectral_dispatch(input,output,npix,0,0.0,1.0,6.0,constants,1);
 }
 
-void audit_film_expose(const float* input,float* output,int count,const double* lut,int edge,double gain,double exposure) {
-        if(edge<4 || edge>256 || !std::isfinite(gain) || gain<=0 || !std::isfinite(exposure) || exposure<=0)
-            throw std::runtime_error("filming GPU parameters invalid");
-        std::vector<float> extra={float(gain),float(exposure),float(edge),0};
-        extra.insert(extra.end(),lut,lut+size_t(edge)*edge*3);
-        float constants[501]{};
-        audit_spectral_dispatch(input,output,count,0,0,1,6,constants,2,extra);
-}
-
 void audit_paper_dispatch(const float* input,float* output,int npix,const float* constants,const std::vector<float>& curves) {
     audit_spectral_dispatch(input,output,npix,0,0,1,6,constants,3,curves);
 }

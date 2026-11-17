@@ -1,4 +1,12 @@
 <resources>
+    <string name="direct_film_scan">Scan film directly</string>
+    <string name="still_color_negatives">Still-photo color negatives</string>
+    <string name="color_cine_negatives">Color motion-picture negatives</string>
+    <string name="color_reversal_films">Color reversal films</string>
+    <string name="monochrome_films">Black-and-white films</string>
+    <string name="color_print_papers">Color print papers</string>
+    <string name="color_cine_prints">Color motion-picture print films</string>
+    <string name="monochrome_prints">Black-and-white print films</string>
     <string name="unsupported_import_format">"Unsupported image format. Choose JPEG, HEIC or DNG."</string>
     <string name="app_name" translatable="false">FILCamera</string>
     <string name="unsupported_dng_file_size">"Unsupported DNG file size"</string>

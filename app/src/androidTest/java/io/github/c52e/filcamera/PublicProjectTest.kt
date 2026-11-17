@@ -91,6 +91,7 @@ class PublicProjectTest {
         assertEquals(500,recipe.printDiffusionStrength)
         assertEquals(1000,recipe.grainStrength)
         assertEquals(1000,recipe.halationStrength)
+        assertEquals(1.0f,recipe.paperContrast,0.0f)
         assertEquals(FilmStocks.AUTO_PAPER, recipe.paperProfile)
         assertEquals(recipe.colorHash, recipe.copy(grainStrength=0, halationStrength=0).colorHash)
         val adjusted=recipe.copy(filmDiffusionStrength=125,printDiffusionStrength=780,grainStrength=600,halationStrength=1800)

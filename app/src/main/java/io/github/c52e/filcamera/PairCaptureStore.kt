@@ -45,7 +45,7 @@ class PairCaptureStore(private val context: Context) {
             .put("previewAutoExposure","Camera2 ISP AE + optional GPU input metering")
             .put("previewEffect",snapshot?.let {JSONObject(it.effectMetadata)} ?: JSONObject(previewMetadata))
             .put("finalAutoExposure","Spektrafilm auto exposure on").put("recipe",recipe.json()).put("recipeHash",recipe.hash)
-            .put("grainSeed",grainSeed).put("resolvedSpatial",recipe.resolvedSpatial())
+            .put("grainSeed",grainSeed)
             .put("engineIdentity",JSONObject(context.assets.open("preview/engine.json").bufferedReader().use { it.readText() }))
         val output=File(dir,"report.json")
         try {
@@ -108,7 +108,8 @@ class PairCaptureStore(private val context: Context) {
                 check(!details.getBoolean("cancelled"))
                 val encoding=timing.stage("photoEncode") { PhotoOutput.write(rgba,w,h,File(dir,"final.jpg"),selected) }
                 report.put("output",PhotoOutput.metadata(File(dir,"final.jpg"),encoding))
-                report.put("render",details).put("status","complete").put("width",w).put("height",h)
+                report.put("resolvedSpatial",details.getJSONObject("resolvedSpatial"))
+                    .put("render",details).put("status","complete").put("width",w).put("height",h)
             }
         } catch(e: OutOfMemoryError) {report.put("status","failed").put("error",tr(Texts.string.out_of_memory));throw IllegalStateException(tr(Texts.string.out_of_memory_saved_dng_retained),e)
         } catch(e: Exception) { report.put("status","failed").put("error",e.toString());throw e }

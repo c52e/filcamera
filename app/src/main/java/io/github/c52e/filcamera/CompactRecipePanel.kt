@@ -49,7 +49,7 @@ private fun RecipeItem.dial(r: FilmRecipe): RecipeDial?=when(this) {
     RecipeItem.Film->RecipeDial(r.film,-20,20,0,{"%+.1f EV".format(it/10f)},{r.copy(film=it)})
     RecipeItem.Development->RecipeDial(r.development,10,30,20,{"%.2f".format(it/20f)},{r.copy(development=it)})
     RecipeItem.Print->RecipeDial(r.print,-30,30,0,{"%+.1f EV".format(it/10f)},{r.copy(print=it)})
-    RecipeItem.Contrast->RecipeDial(r.contrast,10,40,22,{"%.2f".format(it/20f)},{r.copy(contrast=it)})
+    RecipeItem.Contrast->RecipeDial(r.contrast,10,40,FilmRecipe.DEFAULT_PRINT_CONTRAST,{"%.2f".format(it/20f)},{r.copy(contrast=it)})
     RecipeItem.Magenta->RecipeDial(r.magenta,-30,30,0,{"$it CC"},{r.copy(magenta=it)})
     RecipeItem.Yellow->RecipeDial(r.yellow,-30,30,0,{"$it CC"},{r.copy(yellow=it)})
     RecipeItem.Grain->r.effectDial(r.grainStrength,FilmRecipe.DEFAULT_EFFECT_STRENGTH,"×") {copy(grainStrength=it)}
@@ -74,6 +74,9 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
     val active=RecipeItem.valueOf(activeName)
     val effects=group==2
     val cameraEffects=effects && !editing
+    val availableItems=if(recipe.directScan && effects) recipeGroups[group].filterNot { it==RecipeItem.PrintDiffusion }
+        else recipeGroups[group]
+    val selectedItem=active.takeIf { it in availableItems } ?: availableItems.first()
     val showingDetail=detail && !cameraEffects
     BackHandler(catalog || showingDetail) {if(catalog) catalog=false else detail=false}
     Column(modifier.semantics {contentDescription=tr(Texts.string.compact_color_controls)}) {
@@ -85,7 +88,7 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
                 actions()
             }
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                StockOptions(if(paper) recipe.paperProfile else recipe.filmProfile,if(paper) FilmStocks.paperChoices(recipe.filmProfile) else FilmStocks.films) {
+                StockOptions(if(paper) recipe.paperProfile else recipe.filmProfile,if(paper) FilmStocks.paperGroups(recipe.filmProfile) else FilmStocks.filmGroups) {
                     changed(if(paper) recipe.copy(paperProfile=it) else recipe.copy(filmProfile=it));catalog=false
                 }
             }
@@ -98,27 +101,31 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
                 CameraIconButton(CameraIcons.Reset,tr(Texts.string.reset_film_print_and_effects)) {changed(FilmRecipe())}
                 actions()
             }
+            if(group==1 && recipe.directScan) {
+                Text(tr(Texts.string.direct_film_scan),Modifier.padding(horizontal=12.dp))
+                return@Column
+            }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal=8.dp)) {
                 val density=LocalDensity.current
                 val scale=density.fontScale
                 val columns=if(effects || scale>1.2f || maxWidth<270.dp) 2 else 3
                 val tileHeight=maxOf(50f,36*scale).dp
-                val naturalRows=(recipeGroups[group].size+columns-1)/columns
+                val naturalRows=(availableItems.size+columns-1)/columns
                 val adjustmentHeight=if(cameraEffects) 48.dp+maxOf(16.dp,with(density) {16.sp.toDp()}) else 72.dp
                 val requiredHeight=tileHeight*naturalRows+4.dp*(naturalRows-1)+adjustmentHeight
                 val separate=!cameraEffects && (maxHeight<requiredHeight || scale>1.2f || maxWidth<200.dp)
                 val rows=if(separate) ((maxHeight-48.dp)/(tileHeight+4.dp)).toInt().coerceAtLeast(1) else naturalRows
-                val pages=recipeGroups[group].chunked(rows*columns)
+                val pages=availableItems.chunked(rows*columns)
                 val currentPage=page.coerceIn(pages.indices)
                 val body=Modifier.fillMaxSize()
                 // On a short camera panel, start at the slider and let the user scroll up to the options.
                 val scrollToAdjustment=cameraEffects && maxHeight<requiredHeight
                 val scrollable=scrollToAdjustment || effects && (separate || showingDetail)
-                val scrollItem=if(cameraEffects) active else null
+                val scrollItem=if(cameraEffects) selectedItem else null
                 Column(if(scrollable) body.verticalScroll(key(showingDetail,currentPage,scrollItem) {rememberScrollState()},
                     reverseScrolling=scrollToAdjustment) else body) {
                     if(showingDetail) {
-                        key(active) {RecipeAdjustment(active,recipe,changed,{catalog=true},Modifier.fillMaxWidth(),showTitle=false)}
+                        key(selectedItem) {RecipeAdjustment(selectedItem,recipe,changed,{catalog=true},Modifier.fillMaxWidth(),showTitle=false)}
                     } else {
                         pages[currentPage].chunked(columns).forEachIndexed {index,row->
                             if(index>0) Spacer(Modifier.height(4.dp))
@@ -127,7 +134,7 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
                                     val enabled=item.toggle(recipe)
                                     val label=item.label
                                     val value=item.value(recipe)
-                                    val highlighted=enabled ?: (item==active)
+                                    val highlighted=enabled ?: (item==selectedItem)
                                     TextButton(onClick={
                                         if(enabled!=null) changed(recipe.copy(compensate=!enabled))
                                         else {activeName=item.name;detail=separate}
@@ -137,7 +144,7 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
                                         modifier=Modifier.weight(1f).height(tileHeight).semantics {
                                             contentDescription=tr(Texts.string.control_value,label);stateDescription=value
                                             if(enabled!=null) toggleableState=if(enabled) androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off
-                                            else selected=item==active
+                                            else selected=item==selectedItem
                                         }) {
                                         Column(horizontalAlignment=Alignment.CenterHorizontally) {
                                             Text(label,fontSize=12.sp,lineHeight=15.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -154,8 +161,8 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
                         }
                         if(!separate) {
                             if(!scrollable) Spacer(Modifier.weight(1f))
-                            key(active) {
-                                RecipeAdjustment(active,recipe,changed,{catalog=true},Modifier.fillMaxWidth(),
+                            key(selectedItem) {
+                                RecipeAdjustment(selectedItem,recipe,changed,{catalog=true},Modifier.fillMaxWidth(),
                                     hint=if(cameraEffects) tr(Texts.string.final_photo_only) else null)
                             }
                         }

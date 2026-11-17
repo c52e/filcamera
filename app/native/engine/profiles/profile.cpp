@@ -144,6 +144,47 @@ std::vector<float> read_tensor33(const json::Value& value, size_t expected_rows,
     return out;
 }
 
+void read_monochrome_development(const json::Value& data, Profile& profile) {
+    const auto& times = data.at("development_time");
+    if (!times.is_array() || times.size() == 0)
+        profile_error("data.development_time", "must contain at least one time");
+    const auto development = read_vec(times, times.size(), "data.development_time");
+    const size_t count = development.size();
+    const size_t selected = (count - 1) / 2;
+    const auto& base = data.at("base_density");
+    const auto& curves = data.at("density_curves");
+    if (count == 1) {
+        profile.base_density = read_vec(base, kSpectralRows, "data.base_density",
+                                        NullPolicy::PreserveAsNan);
+        profile.density_curves = read_matrix3(curves, kDensityRows, "data.density_curves");
+    } else {
+        require_size(base, kSpectralRows, "data.base_density");
+        require_size(curves, kDensityRows, "data.density_curves");
+        for (size_t row = 0; row < kSpectralRows; ++row) {
+            require_size(base[row], count, "data.base_density row");
+            profile.base_density.push_back(read_float(base[row][selected],
+                "data.base_density value", NullPolicy::PreserveAsNan));
+        }
+        for (size_t row = 0; row < kDensityRows; ++row) {
+            require_size(curves[row], count, "data.density_curves row");
+            const float density = read_float(curves[row][selected], "data.density_curves value");
+            profile.density_curves.insert(profile.density_curves.end(), kChannels, density);
+        }
+    }
+
+    const auto& layers = data.at("density_curves_layers");
+    require_size(layers, kDensityRows, "data.density_curves_layers");
+    for (size_t row = 0; row < kDensityRows; ++row) {
+        require_size(layers[row], kChannels, "data.density_curves_layers row");
+        for (size_t layer = 0; layer < kChannels; ++layer) {
+            const auto& values = layers[row][layer];
+            require_size(values, count, "data.density_curves_layers time axis");
+            const float density = read_float(values[selected], "data.density_curves_layers value");
+            profile.density_curves_layers.insert(profile.density_curves_layers.end(), kChannels, density);
+        }
+    }
+}
+
 std::vector<double> read_fixed_double_matrix(const json::Value& value,
                                               size_t rows, size_t cols,
                                               const std::string& field) {
@@ -234,13 +275,10 @@ Profile load_profile_string(const std::string& json_text) {
         require_string(info, "support", "info.support");
     require_allowlisted(support, "info.support", {"film", "paper"});
 
-    // Upstream also defines a "bw" channel model, but this engine's fixed V1
-    // matrices and all downstream dye operations are explicitly three-channel
-    // CMY. Reject unsupported monochrome payloads instead of interpreting them
-    // as color data.
     const std::string channel_model =
         require_string(info, "channel_model", "info.channel_model");
-    require_allowlisted(channel_model, "info.channel_model", {"color"});
+    require_allowlisted(channel_model, "info.channel_model", {"color", "bw"});
+    p.monochrome = channel_model == "bw";
 
     if (info.has("stock")) p.stock = require_string(info, "stock", "info.stock");
     if (info.has("use")) {
@@ -271,17 +309,22 @@ Profile load_profile_string(const std::string& json_text) {
     p.channel_density = read_matrix3(
         data.at("channel_density"), kSpectralRows, "data.channel_density",
         NullPolicy::PreserveAsNan);
-    p.base_density = read_vec(data.at("base_density"), kSpectralRows,
+    // Pack format 2 stores one silver density for each development time,
+    // while all transport buffers carry three components. The pack's
+    // one-third spectral density coefficients reconstruct their mean.
+    if (p.monochrome) {
+        read_monochrome_development(data, p);
+    } else {
+        p.base_density = read_vec(data.at("base_density"), kSpectralRows,
                               "data.base_density", NullPolicy::PreserveAsNan);
-    // Required by upstream profile validation even though the current Android
-    // pipeline does not consume the cached midscale trace directly.
-    validate_vec(data.at("midscale_neutral_density"), kSpectralRows,
+        validate_vec(data.at("midscale_neutral_density"), kSpectralRows,
                  "data.midscale_neutral_density", NullPolicy::PreserveAsNan);
-    p.density_curves = read_matrix3(data.at("density_curves"), kDensityRows,
+        p.density_curves = read_matrix3(data.at("density_curves"), kDensityRows,
                                     "data.density_curves");
+    }
     p.n_density_pts = static_cast<int>(kDensityRows);
 
-    if (data.has("density_curves_layers")) {
+    if (!p.monochrome && data.has("density_curves_layers")) {
         const json::Value& layers = data.at("density_curves_layers");
         // Upstream serializes the optional tensor's unavailable/default state
         // as [], equivalent to omission. Any non-empty payload is fixed-shape.
@@ -296,7 +339,7 @@ Profile load_profile_string(const std::string& json_text) {
     p.log_exposure = read_vec(data.at("log_exposure"), kDensityRows,
                               "data.log_exposure");
 
-    if (data.has("density_curves_model")) {
+    if (!p.monochrome && data.has("density_curves_model")) {
         const json::Value& model = data.at("density_curves_model");
         if (!model.is_object())
             profile_error("data.density_curves_model", "must be an object");
@@ -330,7 +373,8 @@ Profile load_profile_string(const std::string& json_text) {
         p.dc_model_n_layers = static_cast<int>(center_layers);
     }
 
-    if (data.has("hanatos2025_adaptation_window_params")) {
+    if (data.has("hanatos2025_adaptation_window_params") &&
+        !(p.monochrome && data.at("hanatos2025_adaptation_window_params").is_null_number)) {
         const json::Value& window =
             data.at("hanatos2025_adaptation_window_params");
         if (!window.is_array())
@@ -348,7 +392,8 @@ Profile load_profile_string(const std::string& json_text) {
         }
     }
 
-    if (data.has("hanatos2025_adaptation_surface_params")) {
+    if (data.has("hanatos2025_adaptation_surface_params") &&
+        !(p.monochrome && data.at("hanatos2025_adaptation_surface_params").is_null_number)) {
         const json::Value& surface =
             data.at("hanatos2025_adaptation_surface_params");
         if (!surface.is_array())

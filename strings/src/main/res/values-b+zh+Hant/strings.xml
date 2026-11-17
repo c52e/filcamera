@@ -1,5 +1,13 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
+    <string name="direct_film_scan">直接掃描底片</string>
+    <string name="still_color_negatives">靜態彩色負片</string>
+    <string name="color_cine_negatives">彩色電影負片</string>
+    <string name="color_reversal_films">彩色反轉片</string>
+    <string name="monochrome_films">黑白底片</string>
+    <string name="color_print_papers">彩色相紙</string>
+    <string name="color_cine_prints">彩色電影拷貝片</string>
+    <string name="monochrome_prints">黑白電影拷貝片</string>
     <string name="unsupported_import_format">"不支援此圖片格式，請選擇 JPEG、HEIC 或 DNG。"</string>
     <string name="unsupported_dng_file_size">"DNG 檔案大小不受支援"</string>
     <string name="not_a_tiff_dng_file">"不是 TIFF/DNG 檔案"</string>

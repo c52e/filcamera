@@ -8,6 +8,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,12 +19,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable internal fun StockOptions(value: String,values: Map<String,String>,change: (String)->Unit) {
+@Composable internal fun StockOptions(value: String,groups: List<StockGroup>,change: (String)->Unit) {
     val current=remember {BringIntoViewRequester()}
     LaunchedEffect(Unit) { current.bringIntoView() }
-    values.entries.groupBy {if(it.key==FilmStocks.AUTO_PAPER) tr(Texts.string.default_pairing) else it.value.substringBefore(' ')}.forEach {(brand,entries)->
-        Text(brand,Modifier.padding(start=16.dp,top=12.dp,bottom=4.dp),fontSize=12.sp,color=Muted)
-        entries.forEach {(id,name)->
+    groups.forEach {group->
+        Text(tr(group.title),Modifier.padding(start=16.dp,top=12.dp,bottom=4.dp).semantics {heading()},fontSize=12.sp,color=Muted)
+        group.choices.forEach {(id,name)->
             val chosen=id==value
             Row(Modifier.fillMaxWidth().then(if(chosen) Modifier.bringIntoViewRequester(current) else Modifier)
                 .selectable(chosen,onClick={change(id)},role=Role.RadioButton)

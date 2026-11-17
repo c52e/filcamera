@@ -286,9 +286,9 @@ void film_expose(uint p) {
         float g   = input_rgb[p*3u+1u] * film_controls(0);
         float bch = input_rgb[p*3u+2u] * film_controls(0);
 
-        float X = 0.78940291537782703 * r + 0.12282122346225685 * g + 0.044468206688454449 * bch;
-        float Y = 0.28698841093710081 * r + 0.71347859576974382 * g + -0.00046667083367552562 * bch;
-        float Z = 0.0014710100935912593 * r + 0.0038855140649431182 * g + 0.91578379979792301 * bch;
+        float X = constants[46874] * r + constants[46875] * g + constants[46876] * bch;
+        float Y = constants[46877] * r + constants[46878] * g + constants[46879] * bch;
+        float Z = constants[46880] * r + constants[46881] * g + constants[46882] * bch;
         float bsum = X + Y + Z;
         float denom = max(bsum, 1e-10);
         float cx = X / denom;

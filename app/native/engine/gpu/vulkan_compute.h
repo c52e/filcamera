@@ -309,6 +309,7 @@ struct GrainCell {
 
 struct GrainSampleRequest {
     float subtract[3]{};
+    bool monochrome = false;
     // npix * cell_count floats, index p * cell_count + k, matching `cells`.
     // WHOLE FRAME: the dye-cloud blur reads neighbours, so this is not sliced.
     const float* density_cells = nullptr;

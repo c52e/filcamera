@@ -355,6 +355,7 @@ bool gpu_grain_accumulate(const float* density_cmy_layers, int npix, int width,
     request.height = static_cast<uint32_t>(height);
     request.npix = static_cast<uint32_t>(npix);
     request.seed_offset = static_cast<uint32_t>(grain.seed_offset);
+    request.monochrome = grain.monochrome;
     if(fc_gpu_optimizations()&FC_GRAIN_SUBTRACT) for(int c=0;c<3;++c) request.subtract[c]=float(grain.density_min[c]);
 
     // The channel this used to say to wire "when the route is enabled": it is.

@@ -40,6 +40,7 @@ struct Profile {
     // through the same registry using viewing_illuminant.
     const ViewingIlluminant* resolved_viewing_illuminant = nullptr;
     std::string reference_illuminant;
+    bool monochrome = false;
     // Halation preset tags (info.use / info.antihalation). Drive the digested
     // halation sigma_h / strength via params_builder._HALATION_PRESETS. Default to
     // the "still"/"strong" still-film negative baseline if absent.

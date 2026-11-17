@@ -49,26 +49,42 @@ struct Utf {
     Utf(JNIEnv* e,jstring v):env(e),value(v),bytes(v?e->GetStringUTFChars(v,nullptr):nullptr){if(!bytes) throw std::runtime_error("Missing path");}
     ~Utf(){env->ReleaseStringUTFChars(value,bytes);}
 };
-spk_params modelParams(float ev, bool compensatePrint, bool autoExposure, float gamma, float printEv, float contrast, float magenta, float yellow, const char* filmProfile, const char* paperProfile) {
+spk_params modelParams(spk_engine* engine, float ev, bool compensatePrint, bool autoExposure, float gamma, float printEv, float contrast, float magenta, float yellow, const char* filmProfile, const char* paperProfile) {
         if(!std::isfinite(ev) || std::abs(ev)>2 || !std::isfinite(gamma) || gamma<.5f || gamma>1.5f ||
            !std::isfinite(printEv) || std::abs(printEv)>3 || !std::isfinite(contrast) || contrast<.5f || contrast>2 ||
            !std::isfinite(magenta) || std::abs(magenta)>30 || !std::isfinite(yellow) || std::abs(yellow)>30)
             throw std::runtime_error("Recipe parameter outside supported range");
-        const std::vector<std::string> films={"kodak_portra_400","kodak_portra_160","kodak_portra_800","kodak_portra_800_push1","kodak_portra_800_push2","kodak_ektar_100","kodak_gold_200","kodak_ultramax_400","fujifilm_pro_400h","fujifilm_c200","fujifilm_xtra_400"};
-        const std::vector<std::string> papers={"kodak_portra_endura","kodak_supra_endura","kodak_ultra_endura","kodak_endura_premier","kodak_ektacolor_edge","fujifilm_crystal_archive_typeii"};
-        if(std::find(films.begin(),films.end(),filmProfile)==films.end() || std::find(papers.begin(),papers.end(),paperProfile)==papers.end())
+        static const std::vector<std::string> films={
+            "kodak_portra_400","kodak_portra_160","kodak_portra_800","kodak_portra_800_push1",
+            "kodak_portra_800_push2","kodak_ektar_100","kodak_gold_200","kodak_ultramax_400",
+            "fujifilm_pro_400h","fujifilm_c200","fujifilm_xtra_400",
+            "kodak_vision3_50d","kodak_vision3_200t","kodak_vision3_250d","kodak_vision3_500t","kodak_verita_200d",
+            "kodak_doublex","kodak_2302",
+            "fujifilm_provia_100f","fujifilm_velvia_100","kodak_ektachrome_100","kodak_kodachrome_64","kodak_trix"};
+        static const std::vector<std::string> papers={
+            "kodak_portra_endura","kodak_supra_endura","kodak_ultra_endura","kodak_endura_premier",
+            "kodak_ektacolor_edge","fujifilm_crystal_archive_typeii","kodak_2383","kodak_2393","kodak_2302"};
+        const bool scanFilm=std::strcmp(paperProfile,"direct-scan")==0;
+        if(std::find(films.begin(),films.end(),filmProfile)==films.end() ||
+           (!scanFilm && std::find(papers.begin(),papers.end(),paperProfile)==papers.end()))
             throw std::runtime_error("Unsupported film or paper profile");
+        spk::validate_lab_film_route(engine,filmProfile,scanFilm);
         spk_params p{};spk_default_params(&p);
-        p.disable_buffer_memos=1;p.film_profile=filmProfile;p.print_profile=paperProfile;
+        p.disable_buffer_memos=1;p.film_profile=filmProfile;
+        if(!scanFilm) p.print_profile=paperProfile;
         p.input_color_space="ProPhoto RGB";p.input_cctf_decoding=0;p.auto_exposure=autoExposure?1:0;p.exposure_compensation_ev=ev;
         p.normalize_print_exposure=1;p.print_exposure_compensation=compensatePrint?1:0;
         p.grain_active=0;p.halation_active=0;p.glare_active=0;p.dir_diffusion_size_um=0;
-        p.scanner_unsharp[0]=p.scanner_unsharp[1]=0;p.scan_film=0;p.output_color_space=SPK_CS_SRGB;p.output_cctf_encoding=0;
+        p.scanner_unsharp[0]=p.scanner_unsharp[1]=0;p.scan_film=scanFilm;p.output_color_space=SPK_CS_SRGB;p.output_cctf_encoding=0;
         p.input_gamut_compress=1;p.output_gamut_compress=6;p.print_morph_active=1;
         p.gpu_preview=0;p.gpu_export=0;p.allow_gpu_scan=0;p.use_enlarger_lut=0;p.use_scanner_lut=0;
         p.crop=0;p.upscale_factor=1;
         p.density_curve_gamma=gamma;p.print_exposure=std::exp2(printEv);
         p.print_morph_gamma_factor=contrast;p.m_filter_shift=magenta;p.y_filter_shift=yellow;
+        if (std::strcmp(paperProfile, "kodak_2302") == 0) {
+            p.print_morph_active=0;
+            p.print_density_curve_gamma=contrast;
+        }
         return p;
 }
 int cancelled(void* id){std::lock_guard<std::mutex> lock(cancellationMutex);return cancelledRenders.count(*static_cast<long long*>(id))!=0;}
@@ -107,10 +123,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_ba
         std::call_once(environment,[]{setenv("FILMCAMERA_GPU_CAM16","1",1);});
         if(!context || context->assets!=a.bytes){context.reset();context=std::make_unique<Context>(a.bytes);}
         context->gpu.configureFilmCache(nullptr);
-        auto p=modelParams(ev,compensatePrint,false,gamma,printEv,contrast,magenta,yellow,f.bytes,paper.bytes);
+        auto p=modelParams(context->engine.get(),ev,compensatePrint,false,gamma,printEv,contrast,magenta,yellow,f.bytes,paper.bytes);
         spk_image input{grid.data(),845,325,SPK_CS_PROPHOTO},out{};
         struct Release {spk_image* image;~Release(){spk_image_free(image);}} release{&out};
         const auto renderStart=std::chrono::steady_clock::now();
+        spk::LabRenderReport report;
         auto status=spk_simulate_cancellable(context->engine.get(),&input,&p,&out,bakeCancelled,&id);
         const double renderMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-renderStart).count();
         if(status==SPK_ERR_CANCELLED || bakeCancelled(&id)) { context.reset();return env->NewStringUTF("{\"cancelled\":true}"); }
@@ -135,6 +152,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_ba
         std::string json="{\"cancelled\":false,\"dimension\":65,\"bytes\":2197000,\"engine\":\"resident-pointwise-v1\",\"renderMs\":"+
             std::to_string(renderMs)+",\"totalMs\":"+std::to_string(total)+",\"gpuAllocationBytes\":"+std::to_string(context->gpu.allocationBytes())+
             ",\"relaxedMath\":"+(fc_gpu_relaxed()?"true":"false")+",\"lutStorage\":\"rgba16f\",\"workgroup\":"+std::to_string(fc_gpu_workgroup())+"}";
+        json.pop_back();json+=","+report.json_fields(p.film_format_mm)+"}";
         auto result=env->NewStringUTF(json.c_str());if(result) guard.committed=true;return result;
     } catch(const std::bad_alloc&) {context.reset();if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass("java/lang/OutOfMemoryError"),"Native allocation failed");return nullptr;}
     catch(const std::exception& e) {context.reset();if(!env->ExceptionCheck()) env->ThrowNew(env->FindClass(fc_gpu_memory_failed()?"java/lang/OutOfMemoryError":"java/lang/IllegalStateException"),e.what());return nullptr;}
@@ -236,7 +254,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
             ~PackedScope(){gpu.rgbaTarget=nullptr;gpu.rgbaReady=false;gpu.inputImage=0;}
         } packedScope(context->gpu,packed);
         context->gpu.inputImage=uint64_t(gpuImage);
-        auto p=modelParams(ev,compensatePrint,true,gamma,printEv,contrast,magenta,yellow,f.bytes,paper.bytes);
+        auto p=modelParams(context->engine.get(),ev,compensatePrint,true,gamma,printEv,contrast,magenta,yellow,f.bytes,paper.bytes);
         if(seed<0 || seed>0xffffffffLL) throw std::runtime_error("Invalid grain seed");
         for(float strength:{filmDiffusionStrength,printDiffusionStrength,grainStrength,halationStrength}) {
             if(!std::isfinite(strength) || strength<0 || strength>2) throw std::runtime_error("Invalid effect strength");
@@ -260,7 +278,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
             p.grain_uniformity[0]=.97f;p.grain_uniformity[1]=.99f;p.grain_uniformity[2]=.97f;
             p.halation_active=halationStrength>0;p.halation_scatter_amount=std::min(halationStrength,1.0f);p.halation_scatter_spatial_scale=1;
             p.halation_halation_amount=halationStrength;p.halation_halation_spatial_scale=1;
-            p.camera_diffusion_active=filmDiffusionStrength>0;p.enlarger_diffusion_active=printDiffusionStrength>0;
+            p.camera_diffusion_active=filmDiffusionStrength>0;p.enlarger_diffusion_active=!p.scan_film && printDiffusionStrength>0;
             p.camera_diffusion_strength=filmDiffusionStrength;p.enlarger_diffusion_strength=printDiffusionStrength;
             p.camera_diffusion_spatial_scale=p.enlarger_diffusion_spatial_scale=1;
             p.camera_diffusion_halo_warmth=p.enlarger_diffusion_halo_warmth=0;
@@ -279,11 +297,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         filmKey.dirSpatial=dirSpatial;filmKey.filmDiffusionStrength=filmDiffusionStrength;
         filmKey.grainStrength=grainStrength;filmKey.halationStrength=halationStrength;
         filmKey.exposure=ev;filmKey.gamma=gamma;filmKey.profile=f.bytes;
-        context->gpu.configureFilmCache(cacheFilm && deviceInput?&filmKey:nullptr);
+        context->gpu.configureFilmCache(cacheFilm && deviceInput && !p.scan_film?&filmKey:nullptr);
 
         spk_image in{pixels,width,height,SPK_CS_PROPHOTO},out{};
         struct Release {spk_image* image;~Release(){spk_image_free(image);}} release{&out};
         auto start=std::chrono::steady_clock::now();
+        spk::LabRenderReport report;
         auto status=spk_simulate_cancellable(context->engine.get(),&in,&p,&out,cancelled,&id);
         double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
         if(status==SPK_ERR_CANCELLED || cancelled(&id)){context->gpu.close();return env->NewStringUTF("{\"cancelled\":true}");}
@@ -294,6 +313,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_io_github_c52e_filcamera_FilmEngine_re
         if(cancelled(&id)){context->gpu.close();return env->NewStringUTF("{\"cancelled\":true}");}
         std::string result="{\"cancelled\":false,\"filmEv\":"+std::to_string(ev)+",\"printExposureCompensation\":"+(compensatePrint?"true":"false")+",\"renderMs\":"+std::to_string(ms)+",\"gpuAllocationBytes\":"+std::to_string(context->gpu.allocationBytes())+"}";
         result.pop_back();result+=",\"outputTransport\":\"gpu-fused-srgb-rgba8\"}";
+        result.pop_back();result+=","+report.json_fields(p.film_format_mm)+"}";
         result.pop_back();result+=",\"filmCache\":{\"state\":\""+std::string(context->gpu.filmCacheState())+
             "\",\"bytes\":"+std::to_string(context->gpu.filmCacheBytes())+"}}";
         char timings[32768]{};

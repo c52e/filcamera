@@ -65,7 +65,7 @@ layout(std430, binding = 0) readonly  buffer InBuf  { float density[]; };
 layout(std430, binding = 1) writeonly buffer OutBuf { float grain_out[]; };
 // Per-cell constants, CELL_STRIDE floats each:
 //   0 dmin, 1 dmax, 2 n_ppp, 3 uniformity, 4 od_particle, 5 channel,
-//   6 seed_base (bit-cast uint), 7 radius, 8..14 kernel taps, 15 pad.
+//   6 seed_base (bit-cast uint), 7 radius, 8..14 kernel taps, 15 random stream.
 layout(std430, binding = 2) readonly  buffer CellBuf { float cell[]; };
 layout(std430, binding = 3) buffer CountBuf { uint out_of_branch; } counters;
 
@@ -134,7 +134,8 @@ float sample_cell(uint k, uint gp, uint b, bool count, inout uint outside) {
     float sat = 1.0 - pr * uni * (1.0 - 1e-6);
     float lam = n_ppp / sat;
 
-    uint h0 = mix3(seed_base, gp, pc.seed_offset ^ (k * 0x27d4eb2fu));
+    uint stream = uint(cell[b + 15u]);
+    uint h0 = mix3(seed_base, gp, pc.seed_offset ^ (stream * 0x27d4eb2fu));
     uint h1 = pcg(h0 ^ 0xa5a5a5a5u);
     // Box-Muller: two uniforms in, two independent normals out, which is exactly
     // the two draws this cell needs (Poisson then Binomial). u0 is pushed into

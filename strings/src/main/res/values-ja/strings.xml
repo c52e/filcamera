@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="direct_film_scan">フィルムを直接スキャン</string>
+    <string name="still_color_negatives">写真用カラーネガ</string>
+    <string name="color_cine_negatives">映画用カラーネガ</string>
+    <string name="color_reversal_films">カラーリバーサルフィルム</string>
+    <string name="monochrome_films">モノクロフィルム</string>
+    <string name="color_print_papers">カラー印画紙</string>
+    <string name="color_cine_prints">映画用カラープリントフィルム</string>
+    <string name="monochrome_prints">モノクロプリントフィルム</string>
     <string name="unsupported_import_format">"未対応の画像形式です。JPEG、HEIC、DNG を選択してください。"</string>
     <string name="unsupported_dng_file_size">"対応していない DNG ファイルサイズです"</string>
     <string name="not_a_tiff_dng_file">"TIFF/DNG ファイルではありません"</string>

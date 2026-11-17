@@ -61,6 +61,7 @@ struct GrainParams {
     // Per-channel deterministic RNG seeds (Python uses [0,1,2] + sublayer*10).
     // A single global offset is added so independent realisations can be drawn.
     int seed_base[3] = {0, 1, 2};
+    bool monochrome = false;
     int seed_offset = 0;
     // Fast GPU export route only (owner decision, #180): draw the particle
     // variates from the cheaper generator in kernels/stats.h. Same

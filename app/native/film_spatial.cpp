@@ -4,11 +4,91 @@
 #include "kernels/parallel.h"
 #include "resident_spatial.h"
 #include <cmath>
+#include <locale>
+#include <sstream>
 #include <stdexcept>
 namespace spk {
 thread_local uint32_t lab_grain_seed=0;
 thread_local float lab_grain_strength=1;
 std::atomic<const char*> lab_stage{""};
+thread_local LabRenderReport* lab_render_report = nullptr;
+
+LabRenderReport::LabRenderReport() : previous(lab_render_report) {
+    lab_render_report = this;
+}
+LabRenderReport::~LabRenderReport() { lab_render_report = previous; }
+
+namespace {
+template <size_t N>
+std::ostream& json_array(std::ostream& out, const double (&values)[N]) {
+    out << '[';
+    for (size_t i = 0; i < N; ++i) {
+        if (i) out << ',';
+        out << values[i];
+    }
+    return out << ']';
+}
+
+void append_diffusion(std::ostream& out, const DiffusionFilterParams& p) {
+    constexpr const char* families[] = {"glimmerglass", "black_pro_mist", "pro_mist", "cinebloom"};
+    out << "{\"active\":" << p.active << ",\"strength\":" << (p.active ? p.strength : 0.0)
+        << ",\"family\":\"" << families[static_cast<int>(p.family)] << '"'
+        << ",\"spatialScale\":" << p.spatial_scale << ",\"warmth\":" << p.halo_warmth
+        << ",\"coreIntensity\":" << p.core_intensity << ",\"coreSize\":" << p.core_size
+        << ",\"haloIntensity\":" << p.halo_intensity << ",\"haloSize\":" << p.halo_size
+        << ",\"bloomIntensity\":" << p.bloom_intensity << ",\"bloomSize\":" << p.bloom_size << '}';
+}
+}  // namespace
+
+std::string LabRenderReport::json_fields(float frame_mm) const {
+    const auto& d = film.dir_couplers;
+    const auto& h = film.halation;
+    const auto& g = film.grain;
+    std::ostringstream out;
+    out.imbue(std::locale::classic());
+    out << std::boolalpha << "\"filmReferenceIlluminant\":\"" << (film.tungsten_reference ? "T" : "D55")
+        << "\",\"resolvedSpatial\":{\"frameLongEdgeMm\":" << frame_mm
+        << ",\"dirActive\":" << d.active
+        << ",\"dir\":{\"sizeUm\":" << (d.active ? d.diffusion_size_um : 0.0)
+        << ",\"tailUm\":" << d.diffusion_tail_um << ",\"tailWeight\":" << d.diffusion_tail_weight
+        << ",\"amount\":" << d.amount << ",\"sameLayer\":" << d.inhibition_samelayer
+        << ",\"interLayer\":" << d.inhibition_interlayer << ",\"sameLayerGamma\":";
+    json_array(out, d.gamma_samelayer_rgb) << ",\"rToGB\":";
+    json_array(out, d.gamma_interlayer_r_to_gb) << ",\"gToRB\":";
+    json_array(out, d.gamma_interlayer_g_to_rb) << ",\"bToRG\":";
+    json_array(out, d.gamma_interlayer_b_to_rg) << "},\"filmDiffusion\":";
+    append_diffusion(out, film.diffusion_filter);
+    out << ",\"printDiffusion\":";
+    append_diffusion(out, print_diffusion);
+    out << ",\"halation\":{\"active\":" << h.active << ",\"scatterAmount\":" << h.scatter_amount
+        << ",\"scatterScale\":" << h.scatter_spatial_scale << ",\"reflectionAmount\":" << h.halation_amount
+        << ",\"reflectionScale\":" << h.halation_spatial_scale << ",\"boostEv\":" << h.boost_ev
+        << ",\"bounces\":" << h.halation_n_bounces << ",\"bounceDecay\":" << h.halation_bounce_decay
+        << ",\"renormalize\":" << h.halation_renormalize << ",\"scatterCoreUm\":";
+    json_array(out, h.scatter_core_um) << ",\"scatterTailUm\":";
+    json_array(out, h.scatter_tail_um) << ",\"scatterTailWeight\":";
+    json_array(out, h.scatter_tail_weight) << ",\"reflectionStrength\":";
+    json_array(out, h.halation_strength) << ",\"firstSigmaUm\":";
+    json_array(out, h.halation_first_sigma_um) << '}';
+    out << ",\"grain\":{\"active\":" << g.active << ",\"strength\":" << (g.active ? lab_grain_strength : 0.0)
+        << ",\"monochrome\":" << g.monochrome
+        << ",\"model\":\"profile-density-sublayers-poisson-binomial\""
+        << ",\"seedAlgorithm\":\"pcg32-box-muller-normal-v1\""
+        << ",\"particleAreaUm2\":" << g.agx_particle_area_um2
+        << ",\"blurPixels\":" << g.blur << ",\"dyeCloudScale\":" << g.blur_dye_clouds_um
+        << ",\"particleScale\":";
+    json_array(out, g.agx_particle_scale) << ",\"sublayerScale\":";
+    json_array(out, g.agx_particle_scale_layers) << ",\"densityMin\":";
+    json_array(out, g.density_min) << ",\"uniformity\":";
+    json_array(out, g.uniformity) << ",\"microStructure\":";
+    json_array(out, g.micro_structure) << '}';
+    out << ",\"scanner\":{\"active\":" << (unsharp_sigma > 0 && unsharp_amount > 0)
+        << ",\"unsharpSigmaPixels\":" << unsharp_sigma << ",\"unsharpAmount\":" << unsharp_amount << "}}"
+        << ",\"neutralPrintFilters\":{\"source\":\"" << neutral_filter_source << "\",\"cmyCc\":";
+    json_array(out, neutral_filter_cc) << '}';
+    return out.str();
+}
+
 void lab_grain(const Profile& film,const FilmingParams& params,const std::vector<float>& ndc,int w,int h,float* density) {
     const int n=film.n_density_pts,npix=w*h;
     if(!params.grain.sublayers_active || film.density_curves_layers.size()!=size_t(n)*9)

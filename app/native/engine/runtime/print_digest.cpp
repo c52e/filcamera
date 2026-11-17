@@ -27,7 +27,7 @@ namespace spk {
 
 namespace {
 
-// sRGB (linear) -> XYZ with CAT02 chromatic adaptation to the film's reference
+// sRGB (linear) -> XYZ with CAT16 chromatic adaptation to the film's reference
 // illuminant (D55), apply_cctf_decoding=False. This is the transform
 // _simple_rgb_to_density_spectral takes for the midgray gray: it calls
 // _rgb_to_film_raw(rgb) with the method-default color_space='sRGB' (NOT the
@@ -39,16 +39,18 @@ constexpr double kSRGBToXyzD55[3][3] = {
     {0.21310869420584375, 0.71366086728574663, 0.073230534851494097},
     {0.014970281732550579, 0.096458152341068096, 0.80988979230441371},
 };
+constexpr double kSRGBToXyzT[3][3] = {
+    {0.47862432899829871, 0.51446019132602361, 0.11157034633588678},
+    {0.2179724750835054, 0.70549142421156208, 0.07653720649509059},
+    {2.3551961094226473e-05, 0.018729736757013508, 0.32730667551429055},
+};
 
 inline double clip01(double v) { return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); }
 
-// _rgb_to_tc_b for color_space='sRGB', apply_cctf_decoding=False,
-// reference_illuminant='D55'.
-void srgb_rgb_to_tc_b(const double rgb[3], Vec2* out_tc, double* out_b) {
+void srgb_rgb_to_tc_b(const double rgb[3], const double matrix[3][3], Vec2* out_tc, double* out_b) {
     double xyz[3];
     for (int r = 0; r < 3; ++r) {
-        xyz[r] = kSRGBToXyzD55[r][0] * rgb[0] + kSRGBToXyzD55[r][1] * rgb[1] +
-                 kSRGBToXyzD55[r][2] * rgb[2];
+        xyz[r] = matrix[r][0] * rgb[0] + matrix[r][1] * rgb[1] + matrix[r][2] * rgb[2];
     }
     double b = xyz[0] + xyz[1] + xyz[2];
     double denom = std::fmax(b, 1e-10);
@@ -139,7 +141,7 @@ double exposure_factor_for_gray(const Profile& film, const Profile& print_profil
     const double rgb_mid[3] = {gray, gray, gray};
     Vec2 tc;
     double b;
-    srgb_rgb_to_tc_b(rgb_mid, &tc, &b);
+    srgb_rgb_to_tc_b(rgb_mid, film.reference_illuminant == "T" ? kSRGBToXyzT : kSRGBToXyzD55, &tc, &b);
     const int L = filming_tc_lut.shape[0];
     const double scale = static_cast<double>(L - 1);
     double raw[3];

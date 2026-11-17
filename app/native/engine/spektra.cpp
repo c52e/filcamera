@@ -149,6 +149,32 @@ const double kD55Illuminant[SPK_SPECTRAL_SAMPLES] = {
     0.6145184577576788,0.7491600769284603,0.883801696099242,0.8598811871171415,
     0.8359723182853972};
 
+// Spektrafilm standard_illuminant("T"): Incandescent SPD, aligned and
+// mean-normalized on the same 380..780 nm grid as the D55 reference.
+constexpr double kTungstenIlluminant[SPK_SPECTRAL_SAMPLES] = {
+    0.044290860487078712, 0.051585750595832355, 0.060695365776210673, 0.080526357118237163,
+    0.10060221565179168, 0.11943272418540037, 0.13728858562967097, 0.15467112077302433,
+    0.16866507309404713, 0.18290828425221531, 0.19976734369038093, 0.2173077944063887,
+    0.2326798663933696, 0.2510444390730186, 0.26977954718745112, 0.29052055235658969,
+    0.31179466156241625, 0.33372205819807288, 0.35451979503226494, 0.37858377973780444,
+    0.39958340688637045, 0.42212026082238502, 0.44670745384066046, 0.47049908200856416,
+    0.49632114404384897, 0.52297779961189494, 0.54791907211255586, 0.5755373919150063,
+    0.60238648832844244, 0.63052893459119375, 0.65821916513702783, 0.68688105638908603,
+    0.71737243257581707, 0.747604209548834, 0.77782568840731037, 0.80916181663644504,
+    0.84197070463479839, 0.87431536208206484, 0.90594103026893757, 0.93795044488036095,
+    0.96972940445296985, 1.0022160761344994, 1.0343503119459732, 1.0666486964784918,
+    1.0992623234923373, 1.1310901666113176, 1.1632143989406825, 1.1951538308384908,
+    1.2256472448160873, 1.2570867339479983, 1.2868689599150938, 1.3175466878101896,
+    1.3486075872861383, 1.3785499410728028, 1.4081914316826425, 1.4385009133027542,
+    1.4684603699913443, 1.4978645194556324, 1.5304444840631708, 1.5643993702428256,
+    1.5988494848691726, 1.6278929583694202, 1.6581353118655981, 1.6838037962950616,
+    1.7081754309383532, 1.7329232092476281, 1.7641983427548216, 1.7869933057174028,
+    1.8125966948064482, 1.8416205709436502, 1.8635213785546003, 1.8791814272048726,
+    1.9067867621494494, 1.9368180338409047, 1.9561762040234099, 1.973705424857322,
+    2.0029397142179697, 1.9368180338409047, 1.9561762040234099, 1.973705424857322,
+    2.0029397142179697,
+};
+
 std::string join_path(const std::string& a, const std::string& b) {
     if (a.empty()) return b;
     if (a.back() == '/') return a + b;
@@ -533,11 +559,11 @@ class ProfileInvalid final : public std::runtime_error {
 // Load a film/print profile by id (e.g. "kodak_portra_400") through spk_read_asset.
 // Asset absence and invalid content stay distinct so the additive C status and
 // JNI diagnostic do not collapse a rejected viewing-illuminant ID into "not found".
-static spk::Profile load_engine_profile(spk_engine* eng, const std::string& id) {
+static const spk::Profile& load_engine_profile(spk_engine* eng, const std::string& id) {
     {
         std::lock_guard<std::mutex> g(eng->cache_mutex);
         auto it = eng->profile_cache.find(id);
-        if (it != eng->profile_cache.end()) return it->second;  // copy of cached parse
+        if (it != eng->profile_cache.end()) return it->second;
     }
     std::vector<char> buf;
     std::string rel = std::string("profiles/") + id + ".json";
@@ -564,12 +590,17 @@ static spk::Profile load_engine_profile(spk_engine* eng, const std::string& id) 
     return eng->profile_cache.emplace(id, std::move(parsed)).first->second;
 }
 
+void spk::validate_lab_film_route(spk_engine* engine, const char* film, bool direct_scan) {
+    if (load_engine_profile(engine, film).is_positive() != direct_scan)
+        throw std::runtime_error("Film type does not match the requested render route");
+}
+
 // Cached filming tc_lut, keyed by (film id, spectral_gaussian_blur, apply_window,
 // apply_surface, camera UV/IR band-pass triples, input_gamut_compress) — every
 // live param the build consumes. For the DEFAULT values the key is just the film
 // id and the cached LUT is byte-identical to rebuilding it (build_filming_tc_lut
-// is a pure function of film profile, the immutable spectra LUT, the D55
-// constant, and those inputs). A non-default value gets its own LRU slot so
+// is a pure function of the film profile, its reference illuminant, the immutable
+// spectra LUT, and those inputs). A non-default value gets its own LRU slot so
 // distinct adaptations never collide. The returned shared lease keeps the
 // immutable LUT alive across concurrent eviction. Throws on build failure
 // (caller maps to SPK_ERR_ASSET_IO, as the inline build did).
@@ -629,8 +660,9 @@ static spk::TcLutCache::Lease engine_tc_lut(
     }
     return eng->tc_lut_cache.get_or_build(key, !parameterized, [&] {
         return spk::build_filming_tc_lut(
-            film, engine_spectra(eng), kD55Illuminant,
-            spectral_gaussian_blur, apply_window, apply_surface, filter_uv,
+            film, engine_spectra(eng),
+            film.reference_illuminant == "T" ? kTungstenIlluminant : kD55Illuminant,
+            spectral_gaussian_blur, apply_window && !film.window_params.empty(), apply_surface, filter_uv,
             filter_ir, input_gamut_compress);
     });
 }
@@ -1697,6 +1729,7 @@ const char* pointwise_route_ineligibility(
     if (fparams.lens_blur_um > 0.0) return "camera_lens_blur";
     if (fparams.bw_exposure_correction != 1.0)
         return "film_bw_correction";
+    if (fparams.tungsten_reference) return "film_reference_illuminant";
     if (pparams.diffusion_filter.active) return "print_diffusion";
     if (pparams.morph.active) return "print_morph";
     if (pparams.preflash_exposure > 0.0) return "preflash";
@@ -1970,6 +2003,31 @@ void note_pointwise_self_test(
 
 // Run the scan_film pipeline, producing display RGB plus the intermediate taps.
 // `tap_*` pointers, when non-null, receive the corresponding intermediate.
+void apply_monochrome_filming(const spk::Profile& film, spk::FilmingParams& params) {
+    if (!film.monochrome) return;
+    auto& dir = params.dir_couplers;
+    // The 2302 print profile has no capture-stage DIR fit. Reuse its measured
+    // characteristic curve when exposed in the camera as a negative.
+    if (film.stock == "kodak_2302") dir.active = false;
+    dir.inhibition_interlayer = 0;
+    const double same_layer = film.is_positive() ? 0.2291 : 0.5159;
+    auto& halation = params.halation;
+    auto& grain = params.grain;
+    grain.monochrome = true;
+    for (int channel = 0; channel < 3; ++channel) {
+        dir.gamma_samelayer_rgb[channel] = same_layer;
+        halation.halation_strength[channel] = 0.015;
+        halation.halation_first_sigma_um[channel] = 50.0;
+        halation.scatter_core_um[channel] = 2.2;
+        halation.scatter_tail_um[channel] = 9.3;
+        halation.scatter_tail_weight[channel] = 0.78;
+        grain.agx_particle_scale[channel] = grain.agx_particle_scale[0];
+        grain.density_min[channel] = film.is_positive() ? 0.003 : 0.01;
+        grain.uniformity[channel] = 0.60;
+        grain.seed_base[channel] = 0;
+    }
+}
+
 spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params* p,
                          std::vector<float>* final_rgb,
                          std::vector<float>* tap_log_raw,
@@ -2017,7 +2075,7 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
         return SPK_ERR_PROFILE_INVALID;
     }
     if (film.log_sensitivity.empty() || film.log_exposure.empty() ||
-        film.window_params.size() < 4) {
+        (!film.monochrome && film.window_params.size() < 4)) {
         return SPK_ERR_INTERNAL;  // profile lacks filming fields
     }
     if (cancellation_requested(cancel, cancel_user_data)) return SPK_ERR_CANCELLED;
@@ -2034,6 +2092,7 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
     spk::FilmingParams fparams = spk::digest_filming_params(
         film.is_negative(), /*spatial_effects=*/true,
         !film.stock.empty() ? film.stock.c_str() : p->film_profile);
+    fparams.tungsten_reference = film.reference_illuminant == "T";
     fparams.exposure_compensation_ev = p->exposure_compensation_ev;
     const float g = p->density_curve_gamma != 0.0f ? p->density_curve_gamma : 1.0f;
     fparams.density_curve_gamma[0] = g;
@@ -2138,9 +2197,10 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
     fparams.halation.boost_ev = p->halation_boost_ev;
     fparams.halation.boost_range = p->halation_boost_range;
     fparams.halation.protect_ev = p->halation_protect_ev;
+    apply_monochrome_filming(film, fparams);
 
-    // 3) Build (or reuse the engine-cached) Hanatos2025 filming tc_lut (D55
-    //    reference illuminant). Cached by film id — byte-identical to rebuilding
+    // 3) Build (or reuse the engine-cached) Hanatos2025 filming tc_lut with the
+    //    profile reference illuminant. Cached by film id — byte-identical to rebuilding
     //    (see engine_tc_lut / the spk_engine cache note).
     spk::TcLutCache::Lease tc_lut_lease;
     try {
@@ -2195,6 +2255,25 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
     const size_t out_elems = static_cast<size_t>(npix) * 3;
     const bool scan_tap_bypass =
         (tap_log_raw != nullptr) || (tap_density_cmy != nullptr);
+    auto& resident = audit::Session::current();
+    const char* gpu_mode = std::getenv("FILMCAMERA_GPU_CAM16");
+    const bool resident_scan = gpu_mode && std::strcmp(gpu_mode, "1") == 0 &&
+        pin.direct && final_rgb && !scan_tap_bypass && one_shot_render(p) &&
+        (resident.inputImage != 0 || std::getenv("FILMCAMERA_RESIDENT_TEST"));
+    struct ScanResidentReset {
+        audit::Session& session;
+        bool active;
+        ~ScanResidentReset() {
+            if (active) {
+                session.spatialResident = false;
+                session.spatialStarted = false;
+            }
+        }
+    } reset{resident, resident_scan};
+    if (resident_scan) {
+        resident.spatialResident = true;
+        resident.spatialStarted = false;
+    }
     // Also skipped for one-shot renders (disable_buffer_memos, EXPORT_FASTPATH
     // item 2): no key hash, no lookup, no store — the warm slot stays intact.
     const bool use_scan_film_cache =
@@ -2226,7 +2305,7 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
     if (cancellation_requested(cancel, cancel_user_data)) return SPK_ERR_CANCELLED;
 
     if (!scan_film_cache_hit) {
-        std::vector<float> log_raw(out_elems);
+        std::vector<float> log_raw(resident_scan ? 0 : out_elems);
         if (pin.direct) {
             spk::expose_f32_gain(in->data, pin.gain, width, height, fparams,
                                  tc_lut, log_raw.data());
@@ -2243,7 +2322,7 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
         { std::vector<double>().swap(pin.rgb); }
 
         // 5) develop(): log_raw -> density_cmy (+ DIR couplers, spatial diffusion if on).
-        density_cmy.resize(out_elems);
+        density_cmy.resize(resident_scan ? 0 : out_elems);
         spk::develop(log_raw.data(), width, height, film, fparams, density_cmy.data());
         if (cancellation_requested(cancel, cancel_user_data)) return SPK_ERR_CANCELLED;
         if (use_scan_film_cache) {
@@ -2286,6 +2365,12 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
     sparams.unsharp_sigma = p->scanner_unsharp[0];
     sparams.unsharp_amount = p->scanner_unsharp[1];
     sparams.lens_blur = static_cast<double>(p->scanner_lens_blur);
+    if (auto* report = spk::lab_render_report) {
+        report->film = fparams;
+        report->print_diffusion.strength = 0;
+        report->unsharp_sigma = sparams.unsharp_sigma;
+        report->unsharp_amount = sparams.unsharp_amount;
+    }
     // OPT-IN scanner 3D-LUT acceleration (settings.use_scanner_lut, default 0).
     // When off (the default + parity-gate path) scan() never constructs the LUT and
     // is byte-identical to the direct spectral evaluation. When on, scan() routes
@@ -2305,7 +2390,7 @@ spk_status run_scan_film(spk_engine* eng, const spk_image* in, const spk_params*
         sparams.bw_xyz_q = bw_corr.q;
     }
 
-    final_rgb->assign(static_cast<size_t>(npix) * 3, 0.0f);
+    final_rgb->assign(resident.rgbaTarget ? 0 : out_elems, 0.0f);
     spk::scan(film, sparams, density_cmy.data(), width, height, final_rgb->data());
     if (cancellation_requested(cancel, cancel_user_data)) {
         final_rgb->clear();
@@ -2377,7 +2462,7 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
         return SPK_ERR_PROFILE_INVALID;
     }
     if (film.log_sensitivity.empty() || film.log_exposure.empty() ||
-        film.window_params.size() < 4) {
+        (!film.monochrome && film.window_params.size() < 4)) {
         return SPK_ERR_INTERNAL;  // film profile lacks filming fields
     }
     if (prnt.log_sensitivity.empty() || prnt.log_exposure.empty() ||
@@ -2386,8 +2471,8 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
     }
     if (cancellation_requested(cancel, cancel_user_data)) return SPK_ERR_CANCELLED;
 
-    // 2) Build (or reuse the engine-cached) Hanatos2025 filming tc_lut (D55
-    //    reference illuminant). Needed both by the filming expose and by the
+    // 2) Build (or reuse the engine-cached) Hanatos2025 filming tc_lut with the
+    //    profile reference illuminant. Needed both by the filming expose and by the
     //    native midgray digest below. Cached by film id — byte-identical to
     //    rebuilding (see engine_tc_lut / the spk_engine cache note).
     spk::TcLutCache::Lease tc_lut_lease;
@@ -2422,22 +2507,17 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
     // Resolver failure is failure-atomic, so initialize the schema fallback
     // before either the asset read or JSON/key lookup can fail.
     double neutral_cc[3] = {0.0, 0.0, 0.0};
+    const char* neutral_source = "explicit";
     if (p->neutral_print_filters_from_database) {
         // Read neutral_print_filters.json via the asset abstraction (FS or AAsset),
         // then resolve from the in-memory bytes. A missing/unreadable asset yields
         // defaults {0,0,0}, mirroring the Python FileNotFoundError branch.
         spk::ScopedStage _t(spk::STG_PRINT_DIGEST);
         std::vector<char> nf;
-        if (spk_read_asset(eng, kNeutralFiltersRel, nf,
-                           spk::json::kMaxInputBytes)) {
-            if (!pointwise_test_fault(6)) {
-                (void)spk::resolve_neutral_cc_string(
-                    std::string(nf.data(), nf.size()), print_stock, illuminant,
-                    film_stock, neutral_cc);
-            }
-        } else {
-            neutral_cc[0] = neutral_cc[1] = neutral_cc[2] = 0.0;
-        }
+        const bool found = spk_read_asset(eng, kNeutralFiltersRel, nf, spk::json::kMaxInputBytes) &&
+            !pointwise_test_fault(6) && spk::resolve_neutral_cc_string(
+                std::string(nf.data(), nf.size()), print_stock, illuminant, film_stock, neutral_cc);
+        neutral_source = found ? "database" : "zero-fallback";
     } else {
         // Use the schema neutral CC values directly (filter_enlarger_source uses
         // [c_filter_neutral, m_filter_neutral, y_filter_neutral] in CMY order).
@@ -2591,6 +2671,7 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
     spk::FilmingParams fparams = spk::digest_filming_params(
         film.is_negative(), /*spatial_effects=*/true,
         !film.stock.empty() ? film.stock.c_str() : p->film_profile);
+    fparams.tungsten_reference = film.reference_illuminant == "T";
     fparams.exposure_compensation_ev = p->exposure_compensation_ev;
     const float fg = p->density_curve_gamma != 0.0f ? p->density_curve_gamma : 1.0f;
     fparams.density_curve_gamma[0] = fg;
@@ -2678,11 +2759,20 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
     fparams.halation.boost_ev = p->halation_boost_ev;
     fparams.halation.boost_range = p->halation_boost_range;
     fparams.halation.protect_ev = p->halation_protect_ev;
+    apply_monochrome_filming(film, fparams);
     // Build scan settings before the film memo so the conservative resident
     // route can prove that its three shaders cover the whole requested frame.
     // The same object is reused unchanged by the CPU fallback below.
     spk::ScanningParams sparams = build_print_scanning_params(
         eng, p, print_stochastic, bw_corr);
+    if (auto* report = spk::lab_render_report) {
+        report->film = fparams;
+        report->print_diffusion = pparams.diffusion_filter;
+        report->unsharp_sigma = sparams.unsharp_sigma;
+        report->unsharp_amount = sparams.unsharp_amount;
+        report->neutral_filter_source = neutral_source;
+        std::copy_n(base_neutral_cc, 3, report->neutral_filter_cc);
+    }
 
     const char* pointwise_ineligible = pointwise_route_ineligibility(
         p, film, prnt, tc_lut, fparams, pparams, sparams, final_rgb,
@@ -3218,7 +3308,7 @@ spk_status run_print(spk_engine* eng, const spk_image* in, const spk_params* p,
     if (!final_rgb) return SPK_OK;  // caller only wanted an earlier tap
     if (cancellation_requested(cancel, cancel_user_data)) return SPK_ERR_CANCELLED;
 
-    // 5) Scan the print (D50 viewing illuminant, print profile's dyes).
+    // 5) Scan the print with the viewing illuminant and densities from the print profile.
     // `sparams` was built before the resident route and is reused here.
     // GPU preview fast-path (#146): set only when spk_simulate_preview latched
     // allow_gpu_scan; scan() re-gates on frame eligibility + the self-check.

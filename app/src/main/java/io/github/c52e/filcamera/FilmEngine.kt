@@ -32,8 +32,8 @@ object FilmEngine {
             recipe.grainStrength.toFloat()/FilmRecipe.STRENGTH_UNIT,recipe.halationStrength.toFloat()/FilmRecipe.STRENGTH_UNIT,
             seed,rgba,pixels,gpuImage,cacheFilm),recipe,seed)
     fun bakePreviewLut(assets: String,requestId: Long,outputPath: String,recipe: FilmRecipe=FilmRecipe()): String =
-        annotate(bakeNative(assets,requestId,outputPath,recipe.filmEv,recipe.compensate,recipe.gamma,recipe.printEv,recipe.paperContrast,recipe.magenta.toFloat(),recipe.yellow.toFloat(),recipe.filmProfile,recipe.resolvedPaperProfile),recipe.withoutSpatial(),scanner=false)
-    private fun annotate(result: String,recipe: FilmRecipe,seed: Long=0,scanner: Boolean=true): String {
+        annotate(bakeNative(assets,requestId,outputPath,recipe.filmEv,recipe.compensate,recipe.gamma,recipe.printEv,recipe.paperContrast,recipe.magenta.toFloat(),recipe.yellow.toFloat(),recipe.filmProfile,recipe.resolvedPaperProfile),recipe.withoutSpatial())
+    private fun annotate(result: String,recipe: FilmRecipe,seed: Long=0): String {
         val parser=org.json.JSONTokener(result);val record=parser.nextValue() as org.json.JSONObject
         check(parser.nextClean()=='\u0000') {"Native render returned trailing diagnostic data"}
         val sampling=record.optJSONObject("gpuTransfers")?.let {
@@ -43,7 +43,8 @@ object FilmEngine {
             "radial-table-1over16px-exact-core4-v1" else "direct-exponential")
         record.put("diffusionConvolution",if(record.optJSONObject("gpuTransfers")?.optInt("optimizationMask")?.and(2048)==2048)
             "adaptive-half-fft-core4-v1" else "full-resolution-fft")
-        return record.put("recipe",recipe.json()).put("recipeHash",recipe.hash).put("colorRecipeHash",recipe.colorHash).put("grainSeed",seed).put("spatialPolicy",recipe.spatialPolicy).put("resolvedSpatial",recipe.resolvedSpatial(scanner).put("sampling",sampling)).put("processPssKb",android.os.Debug.getPss()).put("nativeMemory",org.json.JSONObject(memorySnapshot())).toString()
+        record.optJSONObject("resolvedSpatial")?.put("sampling",sampling)?.put("policy",recipe.spatialPolicy)
+        return record.put("recipe",recipe.json()).put("recipeHash",recipe.hash).put("colorRecipeHash",recipe.colorHash).put("grainSeed",seed).put("spatialPolicy",recipe.spatialPolicy).put("processPssKb",android.os.Debug.getPss()).put("nativeMemory",org.json.JSONObject(memorySnapshot())).toString()
     }
     fun recordedSeed(record: org.json.JSONObject): Long? {
         if(record.has("grainSeed")) {

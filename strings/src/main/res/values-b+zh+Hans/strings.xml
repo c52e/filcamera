@@ -1,4 +1,12 @@
 <resources>
+    <string name="direct_film_scan">直接扫描胶片</string>
+    <string name="still_color_negatives">静态彩色负片</string>
+    <string name="color_cine_negatives">彩色电影负片</string>
+    <string name="color_reversal_films">彩色反转片</string>
+    <string name="monochrome_films">黑白胶片</string>
+    <string name="color_print_papers">彩色相纸</string>
+    <string name="color_cine_prints">彩色电影拷贝片</string>
+    <string name="monochrome_prints">黑白电影拷贝片</string>
     <string name="unsupported_import_format">"不支持此图片格式，请选择 JPEG、HEIC 或 DNG。"</string>
     <string name="unsupported_dng_file_size">"DNG 文件大小不受支持"</string>
     <string name="not_a_tiff_dng_file">"不是 TIFF/DNG 文件"</string>

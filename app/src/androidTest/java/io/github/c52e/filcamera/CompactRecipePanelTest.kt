@@ -24,6 +24,26 @@ class CompactRecipePanelTest {
     @get:Rule(order=0) val foreground=foregroundActivityRule(ComponentActivity::class.java)
     @get:Rule(order=1) val ui=createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun fullFilmListUsesStockGroupsAndSelectsById() {
+        var recipe by mutableStateOf(FilmRecipe())
+        ui.setContent {
+            MaterialTheme {
+                CompactRecipePanel(recipe, { recipe=it }, 0, {}, Modifier.width(360.dp).height(360.dp))
+            }
+        }
+
+        val start = FilmStocks.films.keys.toList().indexOf(recipe.filmProfile)
+        assertEquals("kodak_portra_160", FilmStocks.films.keys.elementAt(start - 1))
+        assertEquals("kodak_portra_800", FilmStocks.films.keys.elementAt(start + 1))
+        ui.onNodeWithContentDescription(tr(Texts.string.all_value, tr(Texts.string.film))).performClick()
+        for (title in listOf(Texts.string.still_color_negatives, Texts.string.color_cine_negatives,
+            Texts.string.color_reversal_films, Texts.string.monochrome_films)) {
+            ui.onNodeWithText(tr(title)).assertExists()
+        }
+        ui.onNodeWithText("Kodak Tri-X Reversal 7266").performScrollTo().performClick()
+        ui.runOnIdle { assertEquals("kodak_trix", recipe.filmProfile) }
+    }
+
     @Test fun cameraEffectsKeepTheSliderBelowOptionsAndReadyToUse() {
         var recipe by mutableStateOf(FilmRecipe())
         var group by mutableIntStateOf(0)

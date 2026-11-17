@@ -3,7 +3,7 @@
 #include "resident.h"
 #include "runtime.h"
 #include <stdexcept>
-// FILCamera adaptation: CAT16, no pre-tri2quad xy clamp; D55 only.
+// FILCamera adaptation: CAT16 with no pre-tri2quad xy clamp.
 /*
  * Spektrafilm for Android — native engine: filming stage (rgb -> raw -> density).
  * Copyright (C) 2026 Spektrafilm Android contributors.
@@ -38,7 +38,6 @@
 #include "model/spectral.h"
 
 namespace spk {
-void audit_film_expose(const float*,float*,int,const double*,int,double,double);
 
 namespace {
 std::atomic<long long> g_gpu_halation_frames{0};
@@ -189,7 +188,7 @@ unsigned long long gpu_halation_frames_rendered() {
 
 namespace {
 
-// ProPhoto RGB (linear) -> XYZ with CAT02 chromatic adaptation to the film's
+// ProPhoto RGB (linear) -> XYZ with CAT16 chromatic adaptation to the film's
 // reference illuminant (D55), apply_cctf_decoding=False. Baked from
 // colour.RGB_to_XYZ at full double precision (see oracle dump). Matches
 // _rgb_to_tc_b's fixed linear transform for color_space='ProPhoto RGB'.
@@ -199,17 +198,20 @@ constexpr double kProPhotoToXyzD55[3][3] = {
     {0.28698841093710081, 0.71347859576974382, -0.00046667083367552562},
     {0.0014710100935912593, 0.0038855140649431182, 0.91578379979792301},
 };
+// Matches the same CAT16 transform with the chromaticity of Incandescent ("T").
+constexpr double kProPhotoToXyzT[3][3] = {
+    {0.8820634526805089, 0.25823676984424632, -0.035780884680158116},
+    {0.29884543663627783, 0.69919237569709924, 0.0019598343058791594},
+    {-0.0075279341343202529, -0.018961252269021973, 0.37247676311429162},
+};
 
 inline double clip01(double v) { return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); }
 
-// _rgb_to_tc_b for color_space='ProPhoto RGB', apply_cctf_decoding=False,
-// reference_illuminant='D55'. Mirrors kernels rgb_to_tc_b but with the
-// ProPhoto matrix.
-void prophoto_rgb_to_tc_b(const double rgb[3], Vec2* out_tc, double* out_b) {
+// _rgb_to_tc_b for linear ProPhoto RGB and the film's reference illuminant.
+void prophoto_rgb_to_tc_b(const double rgb[3], const double matrix[3][3], Vec2* out_tc, double* out_b) {
     double xyz[3];
     for (int r = 0; r < 3; ++r) {
-        xyz[r] = kProPhotoToXyzD55[r][0] * rgb[0] + kProPhotoToXyzD55[r][1] * rgb[1] +
-                 kProPhotoToXyzD55[r][2] * rgb[2];
+        xyz[r] = matrix[r][0] * rgb[0] + matrix[r][1] * rgb[1] + matrix[r][2] * rgb[2];
     }
     double b = xyz[0] + xyz[1] + xyz[2];
     double denom = std::fmax(b, 1e-10);
@@ -614,6 +616,7 @@ void expose_impl(const Src& src, int width, int height,
                  double gpu_gain) {
     const int npix = width * height;
     int L = tc_lut.shape[0];
+    const auto& matrix = params.tungsten_reference ? kProPhotoToXyzT : kProPhotoToXyzD55;
     double scale = static_cast<double>(L - 1);
     double exp_mult = std::pow(2.0, params.exposure_compensation_ev);  // 1.0 under goldens
 
@@ -636,10 +639,21 @@ void expose_impl(const Src& src, int width, int height,
     if(audit_mode && std::string(audit_mode)=="1") {
         if(params.allow_gpu_filming || !gpu_rgb_f32 || gpu_rgb_f64)
             throw std::runtime_error("spatial exposure requires direct FP32 input");
-        if(pointwise_fused) {ScopedStage stage(STG_FILMING_EXPOSE);audit_film_expose(gpu_rgb_f32,log_raw_out,npix,tc_lut.data.data(),L,gpu_gain,exp_mult);}
+        if (L < 4 || L > 256 || !std::isfinite(gpu_gain) || gpu_gain <= 0 ||
+            !std::isfinite(exp_mult) || exp_mult <= 0)
+            throw std::runtime_error("filming GPU parameters invalid");
+        std::vector<float> extra = {float(gpu_gain), float(exp_mult), float(L), pointwise_fused ? 0.0f : 1.0f};
+        extra.insert(extra.end(), tc_lut.data.begin(), tc_lut.data.end());
+        float constants[501]{};
+        for (int row = 0; row < 3; ++row)
+            for (int col = 0; col < 3; ++col)
+                constants[row * 3 + col] = static_cast<float>(matrix[row][col]);
+        if(pointwise_fused) {
+            ScopedStage stage(STG_FILMING_EXPOSE);
+            audit_spectral_dispatch(gpu_rgb_f32,log_raw_out,npix,0,0,1,6,constants,2,extra);
+        }
         else {
             if(audit::Session::current().spatialResident) {
-                std::vector<float> extra={float(gpu_gain),float(exp_mult),float(L),1};extra.insert(extra.end(),tc_lut.data.begin(),tc_lut.data.end());float constants[501]{};
                 {ScopedStage stage(STG_FILMING_EXPOSE);audit_spectral_dispatch(gpu_rgb_f32,nullptr,npix,0,0,1,6,constants,2,extra);}
                 ResidentSpatial frame(width,height);
                 if(params.diffusion_filter.active) {lab_stage="Film diffusion";ScopedStage stage(STG_DIFFUSION);apply_diffusion_filter_um(nullptr,width,height,params.diffusion_filter,params.pixel_size_um,true);}
@@ -649,9 +663,6 @@ void expose_impl(const Src& src, int width, int height,
                 frame.finish();return;
             }
             std::vector<float> linear(size_t(npix)*3);
-            std::vector<float> extra={float(gpu_gain),float(exp_mult),float(L),1};
-            extra.insert(extra.end(),tc_lut.data.begin(),tc_lut.data.end());
-            float constants[501]{};
             audit_spectral_dispatch(gpu_rgb_f32,linear.data(),npix,0,0,1,6,constants,2,extra);
             std::vector<double> raw(linear.begin(),linear.end());
             if(params.diffusion_filter.active) {lab_stage="Film diffusion";ScopedStage stage(STG_DIFFUSION);apply_diffusion_filter_um(raw.data(),width,height,params.diffusion_filter,params.pixel_size_um,true);}
@@ -665,7 +676,7 @@ void expose_impl(const Src& src, int width, int height,
     // been written and the CPU loop below runs over the same memory. The latch
     // is off unless the caller set it, so the default route is unchanged.
     const bool gpu_expose_ok =
-        params.allow_gpu_filming && tc_lut.shape.size() == 3 &&
+        params.allow_gpu_filming && !params.tungsten_reference && tc_lut.shape.size() == 3 &&
         tc_lut.shape[0] >= 2 && tc_lut.shape[0] == tc_lut.shape[1] &&
         tc_lut.shape[2] == 3;
 
@@ -687,7 +698,7 @@ void expose_impl(const Src& src, int width, int height,
                 src.load(p, in);
                 Vec2 tc;
                 double b;
-                prophoto_rgb_to_tc_b(in, &tc, &b);
+                prophoto_rgb_to_tc_b(in, matrix, &tc, &b);
                 double rr[3];
                 cubic_interp_lut_at_2d(tc_lut, tc.x * scale, tc.y * scale, rr);
                 for (int c = 0; c < 3; ++c) {
@@ -725,7 +736,7 @@ void expose_impl(const Src& src, int width, int height,
             src.load(p, in);
             Vec2 tc;
             double b;
-            prophoto_rgb_to_tc_b(in, &tc, &b);
+            prophoto_rgb_to_tc_b(in, matrix, &tc, &b);
             double rr[3];
             cubic_interp_lut_at_2d(tc_lut, tc.x * scale, tc.y * scale, rr);
             for (int c = 0; c < 3; ++c) raw[p * 3 + c] = rr[c] * b * exp_mult;

@@ -1845,6 +1845,7 @@ bool grain_sample(const GrainSampleRequest& request, float* out_rgb,
         const uint32_t seed = g.seed_base;
         std::memcpy(&e[6], &seed, sizeof(uint32_t));
         e[7] = static_cast<float>(radius);
+        e[15] = static_cast<float>(request.monochrome ? k / 3u : k);
         for (int t = 0; t < 2 * radius + 1; ++t)
             e[kGrainKernelBase + static_cast<size_t>(t)] = taps[t];
     }
