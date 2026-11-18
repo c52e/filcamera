@@ -24,13 +24,13 @@ import androidx.compose.ui.unit.sp
     LaunchedEffect(Unit) { current.bringIntoView() }
     groups.forEach {group->
         Text(tr(group.title),Modifier.padding(start=16.dp,top=12.dp,bottom=4.dp).semantics {heading()},fontSize=12.sp,color=Muted)
-        group.choices.forEach {(id,name)->
+        group.choices.forEach {(id,option)->
             val chosen=id==value
             Row(Modifier.fillMaxWidth().then(if(chosen) Modifier.bringIntoViewRequester(current) else Modifier)
                 .selectable(chosen,onClick={change(id)},role=Role.RadioButton)
                 .heightIn(min=56.dp).padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
                 RadioButton(selected=chosen,onClick=null)
-                Text(name,Modifier.padding(start=8.dp).weight(1f),fontSize=14.sp,color=if(chosen) Accent else MaterialTheme.colorScheme.onSurface)
+                Text(option.name,Modifier.padding(start=8.dp).weight(1f),fontSize=14.sp,color=if(chosen) Accent else MaterialTheme.colorScheme.onSurface)
             }
         }
     }

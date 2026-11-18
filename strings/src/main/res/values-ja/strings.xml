@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="direct_film_scan">フィルムを直接スキャン</string>
+    <string name="paper_none">なし</string>
     <string name="still_color_negatives">写真用カラーネガ</string>
     <string name="color_cine_negatives">映画用カラーネガ</string>
     <string name="color_reversal_films">カラーリバーサルフィルム</string>
@@ -247,7 +248,7 @@
     <string name="unsupported_film_or_paper">"対応していないフィルムまたは印画紙です"</string>
     <string name="recipe_parameters_are_out_of_range">"レシピのパラメーターが範囲外です"</string>
     <string name="unknown_recipe_version_cannot_restore_accurately">"不明なレシピのバージョンのため、正確に復元できません"</string>
-    <string name="auto_paper_mapping_changed_cannot_restore_accurately">"自動印画紙の対応付けが変更されたため、正確に復元できません"</string>
+    <string name="inconsistent_print_or_scan_settings">"レシピのプリントまたはスキャンの設定に矛盾があるため、正確に復元できません"</string>
     <string name="could_not_save_recipe_upgrade">"レシピの更新を保存できませんでした"</string>
     <string name="auto_value">"オート · %1$s"</string>
     <string name="invalid_photo_grain_seed">"写真の粒状ノイズのシードが無効です"</string>

@@ -21,7 +21,10 @@ data class FilmRecipe(
         require(filmDiffusionStrength in 0..MAX_STRENGTH && printDiffusionStrength in 0..MAX_STRENGTH &&
             grainStrength in 0..MAX_STRENGTH && halationStrength in 0..MAX_STRENGTH) { tr(Texts.string.recipe_parameters_are_out_of_range) }
         require(dirSpatial || (filmDiffusionStrength==0 && printDiffusionStrength==0 && !grain && !halation))
-        require(filmProfile in FilmStocks.films && (paperProfile in FilmStocks.papers || paperProfile==FilmStocks.AUTO_PAPER)) { tr(Texts.string.unsupported_film_or_paper) }
+        require(filmProfile in FilmStocks.films &&
+            (paperProfile in FilmStocks.papers || paperProfile==FilmStocks.AUTO_PAPER || paperProfile==FilmStocks.DIRECT_SCAN)) {
+            tr(Texts.string.unsupported_film_or_paper)
+        }
         require(film in -20..20 && development in 10..30 && print in -30..30 &&
             contrast in 10..40 && magenta in -30..30 && yellow in -30..30) { tr(Texts.string.recipe_parameters_are_out_of_range) }
     }
@@ -69,8 +72,10 @@ data class FilmRecipe(
             val storedFilm=j.getString("filmProfile")
             val filmProfile=if(storedFilm=="kodak_2302") "kodak_doublex" else storedFilm
             val paperProfile=j.getString("paperProfile")
-            if(paperProfile==FilmStocks.AUTO_PAPER || filmProfile in FilmStocks.reversalFilms) {
-                require(version>=3 && j.getString("resolvedPaperProfile")==FilmStocks.resolvedPaper(filmProfile,paperProfile)) { tr(Texts.string.auto_paper_mapping_changed_cannot_restore_accurately) }
+            val needsResolvedPaper=paperProfile==FilmStocks.AUTO_PAPER || paperProfile==FilmStocks.DIRECT_SCAN || filmProfile in FilmStocks.reversalFilms
+            val resolvedPaperMatches=j.opt("resolvedPaperProfile")==FilmStocks.resolvedPaper(filmProfile,paperProfile)
+            require(if(needsResolvedPaper) version>=3 && resolvedPaperMatches else !j.has("resolvedPaperProfile") || resolvedPaperMatches) {
+                tr(Texts.string.inconsistent_print_or_scan_settings)
             }
             fun tick(key: String): Int { val n=j.getDouble(key);require(n.isFinite() && n==n.toInt().toDouble());return n.toInt() }
             fun strength(effect: String, legacyOn: Int): Int=when {

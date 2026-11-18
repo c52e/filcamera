@@ -7,6 +7,7 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.c52e.filcamera.strings.R as Texts
+import io.github.c52e.filcamera.strings.tr
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -122,8 +123,17 @@ class PublicProjectTest {
         }
         val legacy=FilmRecipe.legacy()
         val old=legacy.json().put("version",1)
+        old.remove("resolvedPaperProfile")
         assertEquals(legacy,FilmRecipe.parse(old))
         assertFalse(legacy.dirSpatial)
+
+        val direct=recipe.copy(paperProfile=FilmStocks.DIRECT_SCAN)
+        val printed=recipe.copy(paperProfile=recipe.resolvedPaperProfile)
+        for ((saved,other) in listOf(direct to printed, printed to direct)) {
+            val inconsistent=saved.json().put("resolvedPaperProfile",other.resolvedPaperProfile)
+            val error=assertThrows(IllegalArgumentException::class.java) { FilmRecipe.parse(inconsistent) }
+            assertEquals(tr(Texts.string.inconsistent_print_or_scan_settings),error.message)
+        }
     }
 
     @Test fun retired2302CameraRecipesMigrateAtLoadAndEdit() {

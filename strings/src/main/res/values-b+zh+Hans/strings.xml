@@ -1,5 +1,6 @@
 <resources>
     <string name="direct_film_scan">直接扫描胶片</string>
+    <string name="paper_none">无</string>
     <string name="still_color_negatives">静态彩色负片</string>
     <string name="color_cine_negatives">彩色电影负片</string>
     <string name="color_reversal_films">彩色反转片</string>
@@ -246,7 +247,7 @@
     <string name="unsupported_film_or_paper">"不支持的胶片或相纸种类"</string>
     <string name="recipe_parameters_are_out_of_range">"配方参数超出范围"</string>
     <string name="unknown_recipe_version_cannot_restore_accurately">"未知配方版本，无法准确恢复"</string>
-    <string name="auto_paper_mapping_changed_cannot_restore_accurately">"自动相纸映射已变化，无法准确恢复"</string>
+    <string name="inconsistent_print_or_scan_settings">"配方中的放印或直扫设置不一致，无法准确恢复"</string>
     <string name="could_not_save_recipe_upgrade">"无法保存配方升级"</string>
     <string name="auto_value">"自动 · %1$s"</string>
     <string name="invalid_photo_grain_seed">"照片颗粒种子无效"</string>

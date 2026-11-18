@@ -59,8 +59,8 @@ private fun RecipeItem.dial(r: FilmRecipe): RecipeDial?=when(this) {
     else->null
 }
 private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
-    RecipeItem.Stock->FilmStocks.films.getValue(r.filmProfile).substringAfter(' ')
-    RecipeItem.Paper->if(r.paperProfile==FilmStocks.AUTO_PAPER) tr(Texts.string.auto) else FilmStocks.papers.getValue(r.paperProfile).substringAfter(' ')
+    RecipeItem.Stock->FilmStocks.films.getValue(r.filmProfile).subtitle
+    RecipeItem.Paper->if(r.paperProfile==FilmStocks.AUTO_PAPER) tr(Texts.string.auto) else FilmStocks.papers.getValue(r.paperProfile).subtitle
     else->toggle(r)?.let {if(it) tr(Texts.string.on) else tr(Texts.string.off)} ?: dial(r)!!.let {it.format(it.value)}
 }
 
@@ -77,11 +77,14 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
     val availableItems=if(recipe.directScan && effects) recipeGroups[group].filterNot { it==RecipeItem.PrintDiffusion }
         else recipeGroups[group]
     val selectedItem=active.takeIf { it in availableItems } ?: availableItems.first()
-    val showingDetail=detail && !cameraEffects
-    BackHandler(catalog || showingDetail) {if(catalog) catalog=false else detail=false}
+    val directPrint=group==1 && recipe.directScan
+    val reversal=recipe.filmProfile in FilmStocks.reversalFilms
+    val showingCatalog=catalog && !(directPrint && reversal)
+    val showingDetail=detail && !cameraEffects && !directPrint
+    BackHandler(showingCatalog || showingDetail) {if(showingCatalog) catalog=false else detail=false}
     Column(modifier.semantics {contentDescription=tr(Texts.string.compact_color_controls)}) {
-        if(catalog) {
-            val paper=active==RecipeItem.Paper
+        if(showingCatalog) {
+            val paper=directPrint || selectedItem==RecipeItem.Paper
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 CameraIconButton(CameraIcons.Back,tr(Texts.string.back_to_controls)) {catalog=false}
                 Text(if(paper) tr(Texts.string.all_papers) else tr(Texts.string.all_films),Modifier.weight(1f))
@@ -101,8 +104,9 @@ private fun RecipeItem.value(r: FilmRecipe): String=when(this) {
                 CameraIconButton(CameraIcons.Reset,tr(Texts.string.reset_film_print_and_effects)) {changed(FilmRecipe())}
                 actions()
             }
-            if(group==1 && recipe.directScan) {
-                Text(tr(Texts.string.direct_film_scan),Modifier.padding(horizontal=12.dp))
+            if(directPrint) {
+                if(reversal) Text(tr(Texts.string.direct_film_scan),Modifier.padding(horizontal=12.dp))
+                else RecipeAdjustment(RecipeItem.Paper,recipe,changed,{catalog=true},Modifier.fillMaxWidth())
                 return@Column
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal=8.dp)) {

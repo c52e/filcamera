@@ -26,7 +26,8 @@ import kotlinx.coroutines.launch
 
 /** A local browsing position is not a recipe change until the pager has settled. */
 @OptIn(ExperimentalFoundationApi::class)
-@Composable internal fun StockPicker(title: String,value: String,values: Map<String,String>,onCatalog: ()->Unit,change: (String)->Unit) {
+@Composable internal fun StockPicker(title: String,value: String,values: Map<String,StockOption>,
+    onCatalog: ()->Unit,change: (String)->Unit) {
     val ids=values.keys.toList()
     val pager=rememberPagerState(initialPage=ids.indexOf(value).coerceAtLeast(0),pageCount={ids.size})
     val scope=rememberCoroutineScope()
@@ -54,15 +55,15 @@ import kotlinx.coroutines.launch
         TextButton(onClick={browse(pager.currentPage-1)},enabled=pager.currentPage>0,contentPadding=PaddingValues(0.dp),modifier=Modifier.size(48.dp).semantics {contentDescription=tr(Texts.string.previous_value, title)}) {Text("‹",fontSize=26.sp)}
         HorizontalPager(pager,contentPadding=PaddingValues(horizontal=20.dp),pageSpacing=8.dp,key={ids[it]},
             modifier=Modifier.weight(1f).semantics {contentDescription=tr(Texts.string.value_carousel, title)}) {page->
-            val id=ids[page];val name=values.getValue(id);val centered=page==pager.currentPage
+            val id=ids[page];val option=values.getValue(id);val centered=page==pager.currentPage
             Surface(shape=RoundedCornerShape(12.dp),color=if(centered) Accent.copy(alpha=.12f) else MaterialTheme.colorScheme.surfaceVariant,
                 border=BorderStroke(if(centered) 2.dp else 1.dp,if(centered) Accent else Muted.copy(alpha=.35f)),
                 modifier=Modifier.fillMaxWidth().selectable(id==value,role=Role.RadioButton,onClick={browse(page)})
-                    .semantics {contentDescription=tr(Texts.string.select_value_value, title, name)}) {
+                    .semantics {contentDescription=tr(Texts.string.select_value_value, title, option.name)}) {
                 Column(Modifier.heightIn(min=48.dp).padding(4.dp),
                     verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally) {
-                    Text(if(id==FilmStocks.AUTO_PAPER) tr(Texts.string.auto) else name.substringBefore(' '),fontSize=12.sp,color=Muted)
-                    Text(if(id==FilmStocks.AUTO_PAPER) name.substringAfter(" · ") else name.substringAfter(' '),
+                    Text(option.title,fontSize=12.sp,color=Muted)
+                    Text(option.subtitle,
                         fontSize=12.sp,maxLines=2,overflow=TextOverflow.Ellipsis,color=if(centered) Accent else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

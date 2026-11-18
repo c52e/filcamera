@@ -70,6 +70,28 @@ class CompactRecipePanelTest {
         ui.runOnIdle {assertEquals(1200,recipe.grainStrength)}
     }
 
+    @Test fun negativeDirectScanKeepsPaperPickerAvailable() {
+        var recipe by mutableStateOf(FilmRecipe())
+        ui.setContent {
+            MaterialTheme {
+                CompactRecipePanel(recipe, { recipe=it }, 1, {}, Modifier.width(360.dp).height(360.dp))
+            }
+        }
+
+        val paperOptions = tr(Texts.string.all_value, tr(Texts.string.paper))
+        val printExposure = tr(Texts.string.control_value, tr(Texts.string.print_exposure))
+        ui.onNodeWithContentDescription(tr(Texts.string.control_value, tr(Texts.string.print_paper))).performClick()
+        ui.onNodeWithContentDescription(paperOptions).performClick()
+        val choices = FilmStocks.paperChoices(recipe.filmProfile)
+        ui.onNodeWithText(choices.getValue(FilmStocks.DIRECT_SCAN).name).performClick()
+        ui.runOnIdle { assertEquals(FilmStocks.DIRECT_SCAN, recipe.paperProfile) }
+        ui.onNodeWithContentDescription(printExposure).assertDoesNotExist()
+        ui.onNodeWithContentDescription(paperOptions).performClick()
+        ui.onNodeWithText(choices.getValue(FilmStocks.AUTO_PAPER).name).performClick()
+        ui.runOnIdle { assertEquals(FilmStocks.AUTO_PAPER, recipe.paperProfile) }
+        ui.onNodeWithContentDescription(printExposure).assertIsDisplayed()
+    }
+
     @Test fun bothDiffusionSlidersReachTwoInShortPanel() {
         var recipe by mutableStateOf(FilmRecipe())
         ui.setContent {

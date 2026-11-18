@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="direct_film_scan">直接掃描底片</string>
+    <string name="paper_none">無</string>
     <string name="still_color_negatives">靜態彩色負片</string>
     <string name="color_cine_negatives">彩色電影負片</string>
     <string name="color_reversal_films">彩色反轉片</string>
@@ -247,7 +248,7 @@
     <string name="unsupported_film_or_paper">"不支援的底片或相紙種類"</string>
     <string name="recipe_parameters_are_out_of_range">"配方參數超出範圍"</string>
     <string name="unknown_recipe_version_cannot_restore_accurately">"未知配方版本，無法準確恢復"</string>
-    <string name="auto_paper_mapping_changed_cannot_restore_accurately">"自動相紙對映已變化，無法準確恢復"</string>
+    <string name="inconsistent_print_or_scan_settings">"配方中的放印或直掃設定不一致，無法準確恢復"</string>
     <string name="could_not_save_recipe_upgrade">"無法儲存配方升級"</string>
     <string name="auto_value">"自動 · %1$s"</string>
     <string name="invalid_photo_grain_seed">"照片顆粒種子無效"</string>

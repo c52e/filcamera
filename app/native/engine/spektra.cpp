@@ -591,7 +591,7 @@ static const spk::Profile& load_engine_profile(spk_engine* eng, const std::strin
 }
 
 void spk::validate_lab_film_route(spk_engine* engine, const char* film, bool direct_scan) {
-    if (load_engine_profile(engine, film).is_positive() != direct_scan)
+    if (load_engine_profile(engine, film).is_positive() && !direct_scan)
         throw std::runtime_error("Film type does not match the requested render route");
 }
 

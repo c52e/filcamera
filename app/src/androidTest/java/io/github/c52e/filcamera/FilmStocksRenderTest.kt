@@ -3,6 +3,7 @@ package io.github.c52e.filcamera
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.SystemClock
+import android.util.Half
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.c52e.filcamera.rawvulkan.VulkanRawDeveloper
 import org.json.JSONObject
@@ -11,6 +12,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 
@@ -48,6 +51,11 @@ class FilmStocksRenderTest {
         ))
     }
 
+    @Test fun negativeDirectScansKeepFilmPolarity() {
+        val color = FilmRecipe(paperProfile = FilmStocks.DIRECT_SCAN)
+        verifyRenders(listOf(color, color.copy(filmProfile = "kodak_doublex")))
+    }
+
     private fun verifyRenders(combinations: List<FilmRecipe>) {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val task = FutureTask {
@@ -75,6 +83,7 @@ class FilmStocksRenderTest {
                 for (recipe in combinations) {
                     assertEquals(recipe, FilmRecipe.parse(recipe.json()))
                     val name = "${recipe.filmProfile} / ${recipe.resolvedPaperProfile}"
+                    val negativeScan = recipe.directScan && recipe.filmProfile !in FilmStocks.reversalFilms
                     val checkPrintCache = recipe.filmProfile == "kodak_vision3_50d" &&
                         recipe.paperProfile == FilmStocks.AUTO_PAPER
                     val lut = File(app.cacheDir, "color-stock-${SystemClock.elapsedRealtimeNanos()}.lut")
@@ -86,6 +95,12 @@ class FilmStocksRenderTest {
                         assertEquals(name, 65L * 65 * 65 * 8, lut.length())
                         assertFalse(bake.getJSONObject("resolvedSpatial").getJSONObject("scanner").getBoolean("active"))
                         verify2302PrintFilters(recipe, bake)
+                        if (negativeScan) {
+                            val bytes = ByteBuffer.wrap(lut.readBytes()).order(ByteOrder.LITTLE_ENDIAN)
+                            val first = Half.toFloat(bytes.getShort(2))
+                            val last = Half.toFloat(bytes.getShort(bytes.capacity() - 6))
+                            assertTrue("$name preview LUT lost negative polarity ($first, $last)", first > last + .02f)
+                        }
                     } finally {
                         lut.delete()
                     }
@@ -124,15 +139,22 @@ class FilmStocksRenderTest {
                     if (recipe.filmProfile in listOf("kodak_doublex", "kodak_trix")) {
                         val grain = spatial.getJSONObject("grain")
                         assertTrue(grain.getBoolean("monochrome"))
-                        assertEquals(if (recipe.directScan) .003 else .01, grain.getJSONArray("densityMin").getDouble(0), 1e-6)
+                        assertEquals(if (recipe.filmProfile == "kodak_trix") .003 else .01,
+                            grain.getJSONArray("densityMin").getDouble(0), 1e-6)
                     }
                     val transfers = render.getJSONObject("gpuTransfers")
                     assertEquals(name, 0L, transfers.getLong("imageUploadBytes"))
                     assertEquals(name, 0L, transfers.getLong("intermediateReadbackBytes"))
                     val row = width * (height / 2) * 4
-                    val dark = output.get(row + 1).toInt() and 255
-                    val bright = output.get(row + (width - 1) * 4 + 1).toInt() and 255
-                    assertTrue("$name produced a flat or inverted ramp ($dark, $bright)", bright > dark + 20)
+                    val shadow = output.get(row + 1).toInt() and 255
+                    val highlight = output.get(row + (width - 1) * 4 + 1).toInt() and 255
+                    val expectedRise = if (negativeScan) shadow - highlight else highlight - shadow
+                    assertTrue("$name produced an incorrect ramp ($shadow, $highlight)", expectedRise > 20)
+                    if (negativeScan && recipe.filmProfile == "kodak_portra_400") {
+                        val red = output.get(row).toInt() and 255
+                        val blue = output.get(row + 2).toInt() and 255
+                        assertTrue("$name lost its colored film base ($red, $blue)", red > blue + 20)
+                    }
                     if (recipe.resolvedPaperProfile == "kodak_2302") {
                         for (col in listOf(width / 3, width / 2, width * 2 / 3)) {
                             val rgb = (0..2).map { output.get(row + col * 4 + it).toInt() and 255 }
