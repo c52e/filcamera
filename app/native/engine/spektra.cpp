@@ -2006,9 +2006,6 @@ void note_pointwise_self_test(
 void apply_monochrome_filming(const spk::Profile& film, spk::FilmingParams& params) {
     if (!film.monochrome) return;
     auto& dir = params.dir_couplers;
-    // The 2302 print profile has no capture-stage DIR fit. Reuse its measured
-    // characteristic curve when exposed in the camera as a negative.
-    if (film.stock == "kodak_2302") dir.active = false;
     dir.inhibition_interlayer = 0;
     const double same_layer = film.is_positive() ? 0.2291 : 0.5159;
     auto& halation = params.halation;

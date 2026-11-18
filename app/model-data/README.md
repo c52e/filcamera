@@ -14,16 +14,6 @@ that pack into its existing neutral print filter table. Existing color pairs
 retain their original calibration. The profile loader selects the middle
 development curve where the pack supplies a family.
 
-For 2302 as camera negative, FILCamera fits the TH-KG3 enlarger filters at
-normalized midgray using the 5-minute 2302 base spectrum and the output
-material's sensitivity, curves and viewing illuminant. The fit uses the
-default 1.0 print contrast and minimizes CIELAB chroma with one filter
-channel fixed at zero. At relative print log exposures of -0.25, 0 and
-+0.25, the fitted color materials have modeled chroma under 4.1. The 2302
-monochrome print remains neutral with all three filters at zero. These are
-spectral model calibrations. The Tri-X filter rows remain as supplied by
-the upstream pack for printing workflows, while FILCamera scans Tri-X directly.
-
 Profiles/LUTs have the separate CC BY-SA 4.0 license and preamble in
 `../native/engine/licenses/SPEKTRAFILM_LICENSE.txt`; they are not relicensed as GPL.
 ICC assets retain their bundled MIT / CC BY-SA notices. The APK includes attribution,

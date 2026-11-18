@@ -10,7 +10,7 @@ object FilmStocks {
     const val AUTO_PAPER="auto"
     const val DIRECT_SCAN="direct-scan"
     val reversalFilms = setOf("fujifilm_provia_100f","fujifilm_velvia_100","kodak_ektachrome_100","kodak_kodachrome_64","kodak_trix")
-    // Defaults from the color profiles, plus 2302 for the monochrome negatives.
+    // Defaults from the color profiles, plus 2302 for Double-X.
     val targetPapers=mapOf(
         "kodak_portra_400" to "kodak_portra_endura",
         "kodak_portra_160" to "kodak_portra_endura",
@@ -28,8 +28,7 @@ object FilmStocks {
         "kodak_vision3_250d" to "kodak_2383",
         "kodak_vision3_500t" to "kodak_2383",
         "kodak_verita_200d" to "kodak_2383",
-        "kodak_doublex" to "kodak_2302",
-        "kodak_2302" to "kodak_2302"
+        "kodak_doublex" to "kodak_2302"
     )
     internal fun paperGroups(film: String) = listOf(
         StockGroup(Texts.string.default_pairing, mapOf(
@@ -72,7 +71,6 @@ object FilmStocks {
         )),
         StockGroup(Texts.string.monochrome_films, linkedMapOf(
             "kodak_doublex" to "Kodak Double-X 5222",
-            "kodak_2302" to "Kodak 2302",
             "kodak_trix" to "Kodak Tri-X Reversal 7266"
         ))
     )

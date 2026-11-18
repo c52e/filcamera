@@ -59,7 +59,7 @@ spk_params modelParams(spk_engine* engine, float ev, bool compensatePrint, bool 
             "kodak_portra_800_push2","kodak_ektar_100","kodak_gold_200","kodak_ultramax_400",
             "fujifilm_pro_400h","fujifilm_c200","fujifilm_xtra_400",
             "kodak_vision3_50d","kodak_vision3_200t","kodak_vision3_250d","kodak_vision3_500t","kodak_verita_200d",
-            "kodak_doublex","kodak_2302",
+            "kodak_doublex",
             "fujifilm_provia_100f","fujifilm_velvia_100","kodak_ektachrome_100","kodak_kodachrome_64","kodak_trix"};
         static const std::vector<std::string> papers={
             "kodak_portra_endura","kodak_supra_endura","kodak_ultra_endura","kodak_endura_premier",

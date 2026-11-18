@@ -66,7 +66,8 @@ data class FilmRecipe(
         fun parse(j: JSONObject): FilmRecipe {
             val version=j.getInt("version")
             require(version in 1..4) { tr(Texts.string.unknown_recipe_version_cannot_restore_accurately) }
-            val filmProfile=j.getString("filmProfile")
+            val storedFilm=j.getString("filmProfile")
+            val filmProfile=if(storedFilm=="kodak_2302") "kodak_doublex" else storedFilm
             val paperProfile=j.getString("paperProfile")
             if(paperProfile==FilmStocks.AUTO_PAPER || filmProfile in FilmStocks.reversalFilms) {
                 require(version>=3 && j.getString("resolvedPaperProfile")==FilmStocks.resolvedPaper(filmProfile,paperProfile)) { tr(Texts.string.auto_paper_mapping_changed_cannot_restore_accurately) }
@@ -82,6 +83,7 @@ data class FilmRecipe(
                 strength("grain",DEFAULT_EFFECT_STRENGTH),strength("halation",DEFAULT_EFFECT_STRENGTH),
                 if(version>=2) j.getString("spatialPolicy") else LEGACY_POLICY)
         }
+
         fun restore(j: JSONObject): FilmRecipe {
             j.optJSONObject("recipe")?.let { return parse(it) }
             j.optJSONObject("render")?.let { return restore(it) }
@@ -91,9 +93,12 @@ data class FilmRecipe(
         }
         fun load(context: Context): FilmRecipe {
             val prefs=context.getSharedPreferences("film-recipe",0)
-            val saved=prefs.getString("recipe",null)?.let { parse(JSONObject(it)) }
-            if(!prefs.getBoolean("defaults-v2-applied",false)) {
-                val upgraded=FilmRecipe(filmProfile=saved?.filmProfile ?: "kodak_portra_400",paperProfile=saved?.paperProfile ?: FilmStocks.AUTO_PAPER)
+            val stored=prefs.getString("recipe",null)?.let(::JSONObject)
+            val saved=stored?.let(::parse)
+            val filmReplaced=stored?.getString("filmProfile")!=saved?.filmProfile
+            if(filmReplaced || !prefs.getBoolean("defaults-v2-applied",false)) {
+                val upgraded=if(filmReplaced) checkNotNull(saved) else
+                    FilmRecipe(filmProfile=saved?.filmProfile ?: "kodak_portra_400",paperProfile=saved?.paperProfile ?: FilmStocks.AUTO_PAPER)
                 check(prefs.edit().putString("recipe",upgraded.json().toString()).putBoolean("defaults-v2-applied",true).commit()) { tr(Texts.string.could_not_save_recipe_upgrade) }
                 return upgraded
             }

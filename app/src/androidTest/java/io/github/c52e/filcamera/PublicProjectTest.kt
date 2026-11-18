@@ -10,6 +10,7 @@ import io.github.c52e.filcamera.strings.R as Texts
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
@@ -123,6 +124,41 @@ class PublicProjectTest {
         val old=legacy.json().put("version",1)
         assertEquals(legacy,FilmRecipe.parse(old))
         assertFalse(legacy.dirSpatial)
+    }
+
+    @Test fun retired2302CameraRecipesMigrateAtLoadAndEdit() {
+        val id = "retired-2302-${SystemClock.elapsedRealtimeNanos()}"
+        val prefs = app.getSharedPreferences(id, 0)
+        val context = object : ContextWrapper(app) {
+            override fun getSharedPreferences(name: String?, mode: Int) = prefs
+        }
+        val record = File(app.cacheDir, "$id.json")
+        val versionRecord = File(app.cacheDir, "$id-version.json")
+        val replacement = FilmRecipe(filmProfile = "kodak_doublex", film = 3, contrast = 24, grainStrength = 600)
+        val oldAuto = replacement.json().put("filmProfile", "kodak_2302")
+        val explicit = replacement.copy(paperProfile = "kodak_portra_endura")
+        val oldExplicit = explicit.json().put("filmProfile", "kodak_2302")
+        try {
+            assertTrue(prefs.edit().putString("recipe", oldAuto.toString()).putBoolean("defaults-v2-applied", true).commit())
+            assertEquals(replacement, FilmRecipe.load(context))
+            assertEquals(replacement, FilmRecipe.parse(JSONObject(prefs.getString("recipe", null)!!)))
+
+            val capture = JSONObject().put("captureRecipe", JSONObject().put("recipe", oldAuto)).toString()
+            val edit = JSONObject().put("render", JSONObject().put("recipe", oldExplicit)).toString()
+            record.writeText(capture)
+            versionRecord.writeText(edit)
+            val version = PhotoRepository.Version(id, File(app.cacheDir, "$id.jpg"), versionRecord)
+            val photo = PhotoRepository.Photo(id, File(app.cacheDir, "$id.dng"), record, 0L, listOf(version))
+            val repository = PhotoRepository(app)
+            assertEquals(replacement, repository.recipe(photo, null))
+            assertEquals(explicit, repository.recipe(photo, version))
+            assertEquals(capture, record.readText())
+            assertEquals(edit, versionRecord.readText())
+        } finally {
+            app.deleteSharedPreferences(id)
+            record.delete()
+            versionRecord.delete()
+        }
     }
 
     @Test fun publicAssetsBakeRepeatableLutAndRejectCorruption() {

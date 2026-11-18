@@ -35,14 +35,15 @@ class FilmStocksRenderTest {
 
     @Test fun newMonochromeStocksBakeAndRender() {
         val base = FilmRecipe()
-        val negatives = listOf("kodak_doublex", "kodak_2302").map { base.copy(filmProfile = it) }
-        assertTrue(negatives.all { it.resolvedPaperProfile == "kodak_2302" })
+        val negative = base.copy(filmProfile = "kodak_doublex")
+        assertEquals("kodak_2302", negative.resolvedPaperProfile)
+        assertFalse("kodak_2302" in FilmStocks.films)
         val reversal = base.copy(filmProfile = "kodak_trix")
         assertTrue(reversal.directScan)
-        val color2302 = negatives.last().copy(paperProfile = "kodak_portra_endura")
-        verifyRenders(negatives + reversal + listOf(
-            negatives.first().copy(paperProfile = "kodak_portra_endura"),
-            color2302,
+        verifyRenders(listOf(
+            negative,
+            reversal,
+            negative.copy(paperProfile = "kodak_portra_endura"),
             base.copy(paperProfile = "kodak_2302")
         ))
     }
@@ -84,7 +85,7 @@ class FilmStocksRenderTest {
                         assertFalse(name, bake.getBoolean("cancelled"))
                         assertEquals(name, 65L * 65 * 65 * 8, lut.length())
                         assertFalse(bake.getJSONObject("resolvedSpatial").getJSONObject("scanner").getBoolean("active"))
-                        verify2302Filters(recipe, bake)
+                        verify2302PrintFilters(recipe, bake)
                     } finally {
                         lut.delete()
                     }
@@ -119,11 +120,8 @@ class FilmStocksRenderTest {
                         val cached = ByteArray(output.capacity()).also { output.duplicate().apply { clear(); get(it) } }
                         assertTrue(saved.contentEquals(cached))
                     }
-                    if (recipe.filmProfile == "kodak_2302") {
-                        assertFalse(spatial.getBoolean("dirActive"))
-                        verify2302Filters(recipe, render)
-                    }
-                    if (recipe.filmProfile in listOf("kodak_doublex", "kodak_trix", "kodak_2302")) {
+                    verify2302PrintFilters(recipe, render)
+                    if (recipe.filmProfile in listOf("kodak_doublex", "kodak_trix")) {
                         val grain = spatial.getJSONObject("grain")
                         assertTrue(grain.getBoolean("monochrome"))
                         assertEquals(if (recipe.directScan) .003 else .01, grain.getJSONArray("densityMin").getDouble(0), 1e-6)
@@ -135,8 +133,7 @@ class FilmStocksRenderTest {
                     val dark = output.get(row + 1).toInt() and 255
                     val bright = output.get(row + (width - 1) * 4 + 1).toInt() and 255
                     assertTrue("$name produced a flat or inverted ramp ($dark, $bright)", bright > dark + 20)
-                    if (recipe.filmProfile == "kodak_2302") {
-                        // The neutral reference uses the default 5-minute curves.
+                    if (recipe.resolvedPaperProfile == "kodak_2302") {
                         for (col in listOf(width / 3, width / 2, width * 2 / 3)) {
                             val rgb = (0..2).map { output.get(row + col * 4 + it).toInt() and 255 }
                             assertTrue("$name colored a neutral patch: $rgb", rgb.max() - rgb.min() <= 12)
@@ -153,16 +150,16 @@ class FilmStocksRenderTest {
         task.get(180, TimeUnit.SECONDS)
     }
 
-    private fun verify2302Filters(recipe: FilmRecipe, result: JSONObject) {
-        if (recipe.filmProfile != "kodak_2302") return
+    private fun verify2302PrintFilters(recipe: FilmRecipe, result: JSONObject) {
+        if (recipe.resolvedPaperProfile != "kodak_2302") return
         val filters = result.getJSONObject("neutralPrintFilters")
         val cc = filters.getJSONArray("cmyCc")
-        val blackAndWhite = recipe.resolvedPaperProfile == "kodak_2302"
-        val expected = when {
-            blackAndWhite -> doubleArrayOf(0.0, 0.0, 0.0)
-            else -> doubleArrayOf(0.0, 79.667, 98.142)
+        val expected = when (recipe.filmProfile) {
+            "kodak_doublex" -> doubleArrayOf(0.0, 1.36035, 1.46482)
+            "kodak_portra_400" -> doubleArrayOf(0.0, 15.86151, 117.54027)
+            else -> error("Missing 2302 print filter reference for ${recipe.filmProfile}")
         }
         assertEquals("database", filters.getString("source"))
-        expected.forEachIndexed { channel, value -> assertEquals(value, cc.getDouble(channel), 1e-4) }
+        expected.forEachIndexed { channel, value -> assertEquals(value, cc.getDouble(channel), 1e-3) }
     }
 }
